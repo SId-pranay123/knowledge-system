@@ -2,7 +2,7 @@ import { IsString } from 'class-validator';
 import { z } from 'zod';
 
 export class AskQuestionDto {
-  @IsString() question: string;
+  @IsString() question!: string;
 }
 
 // Structured output for the query-analyzer LLM call

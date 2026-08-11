@@ -1,0 +1,38 @@
+[
+  {
+    "id": "c001",
+    "name": "Lexora Legal",
+    "industry": "Legal Tech",
+    "size": "Mid-size",
+    "primary_contact": "Neha Kapoor",
+    "status": "Active",
+    "notes": "Building internal knowledge system for case law and contracts. High interest in structured retrieval."
+  },
+  {
+    "id": "c002",
+    "name": "MediSync Health",
+    "industry": "Healthcare",
+    "size": "Enterprise",
+    "primary_contact": "Dr. Amit Rao",
+    "status": "Active",
+    "notes": "Need better way to connect clinical guidelines, internal protocols, and research papers."
+  },
+  {
+    "id": "c003",
+    "name": "FinEdge Analytics",
+    "industry": "Finance",
+    "size": "Startup",
+    "primary_contact": "Karan Malhotra",
+    "status": "Past",
+    "notes": "Completed a RAG pilot for internal research reports. Project closed in March 2025."
+  },
+  {
+    "id": "c004",
+    "name": "GreenGrid Energy",
+    "industry": "Energy",
+    "size": "Mid-size",
+    "primary_contact": "Meera Iyer",
+    "status": "Active",
+    "notes": "Exploring knowledge base for technical documentation and field reports."
+  }
+]

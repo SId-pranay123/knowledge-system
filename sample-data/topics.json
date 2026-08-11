@@ -1,0 +1,52 @@
+[
+  {
+    "id": "t001",
+    "name": "Legal Knowledge",
+    "description": "Systems and methods for organising case law, statutes, contracts and internal legal notes."
+  },
+  {
+    "id": "t002",
+    "name": "Document Linking",
+    "description": "Creating and maintaining meaningful connections between documents and other entities."
+  },
+  {
+    "id": "t003",
+    "name": "Structured Retrieval",
+    "description": "Going beyond keyword or pure vector search by using structure and relationships."
+  },
+  {
+    "id": "t004",
+    "name": "Healthcare Knowledge",
+    "description": "Clinical guidelines, protocols, research papers and how they relate to each other."
+  },
+  {
+    "id": "t005",
+    "name": "Internal Knowledge",
+    "description": "How a small team keeps track of its own decisions, projects, people and lessons."
+  },
+  {
+    "id": "t006",
+    "name": "RAG",
+    "description": "Retrieval Augmented Generation patterns and their limitations."
+  },
+  {
+    "id": "t007",
+    "name": "AI Stack",
+    "description": "Choices around models, tools and infrastructure used in projects."
+  },
+  {
+    "id": "t008",
+    "name": "Scope Control",
+    "description": "Decisions about what to include or exclude in early versions of systems."
+  },
+  {
+    "id": "t009",
+    "name": "Domain Expertise",
+    "description": "Need for subject matter experts when building knowledge systems in specialised fields."
+  },
+  {
+    "id": "t010",
+    "name": "Team Memory",
+    "description": "Capturing why decisions were made and what was learned so the team does not repeat work."
+  }
+]

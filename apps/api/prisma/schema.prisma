@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
@@ -35,16 +36,16 @@ model Client {
 }
 
 model Project {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   name        String
   description String?
-  status      String   @default("ACTIVE")
+  status      String    @default("ACTIVE")
   clientId    String?
-  client      Client?  @relation(fields: [clientId], references: [id])
+  client      Client?   @relation(fields: [clientId], references: [id])
   startDate   DateTime?
   endDate     DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("projects")
 }
@@ -64,13 +65,13 @@ model Document {
 }
 
 model Chunk {
-  id             String                @id @default(uuid())
+  id             String                       @id @default(uuid())
   documentId     String
-  document       Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document       Document                     @relation(fields: [documentId], references: [id], onDelete: Cascade)
   content        String
   chunkIndex     Int
-  embedding      Unsupported("vector(768)")?
-  createdAt      DateTime              @default(now())
+  embedding      Unsupported("vector(3072)")?
+  createdAt      DateTime                     @default(now())
 
   @@map("chunks")
 }

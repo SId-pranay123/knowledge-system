@@ -1,0 +1,42 @@
+[
+  {
+    "id": "d001",
+    "title": "Prefer structured knowledge over pure vector RAG for Lexora",
+    "date": "2025-09-20",
+    "project_id": "proj001",
+    "made_by": "p002",
+    "participants": ["p001", "p002", "p003", "p005"],
+    "summary": "After initial experiments, pure vector search missed important legal relationships (case → statute → amendment). Decided to invest in richer linking between entities.",
+    "related_topics": ["Legal Knowledge", "Document Linking", "Structured Retrieval"]
+  },
+  {
+    "id": "d002",
+    "title": "Do not build full Slack integration in v1 of internal KB",
+    "date": "2025-08-05",
+    "project_id": "proj004",
+    "made_by": "p001",
+    "participants": ["p001", "p005", "p006"],
+    "summary": "Slack has too much noise. For first version, focus on documents, decisions, people and projects. Slack can be added later if needed.",
+    "related_topics": ["Internal Knowledge", "Scope Control"]
+  },
+  {
+    "id": "d003",
+    "title": "Use Gemini for generation tasks in client demos",
+    "date": "2025-10-12",
+    "project_id": null,
+    "made_by": "p001",
+    "participants": ["p001", "p002", "p004"],
+    "summary": "Company decision to standardise on Gemini for most generation and analysis tasks in client work, unless client has strong preference otherwise.",
+    "related_topics": ["AI Stack", "Vendor Choice"]
+  },
+  {
+    "id": "d004",
+    "title": "MediSync project stays in discovery until clinical advisor is onboarded",
+    "date": "2025-12-01",
+    "project_id": "proj002",
+    "made_by": "p004",
+    "participants": ["p001", "p004"],
+    "summary": "Healthcare domain needs stronger domain expertise before architecture decisions. Waiting for part-time clinical advisor.",
+    "related_topics": ["Healthcare Knowledge", "Domain Expertise"]
+  }
+]

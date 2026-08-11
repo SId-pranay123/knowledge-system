@@ -1,7 +1,7 @@
 import { IsEmail, IsOptional, IsString } from 'class-validator';
 
 export class CreatePersonDto {
-  @IsString() name: string;
+  @IsString() name!: string;
   @IsEmail() @IsOptional() email?: string;
   @IsString() @IsOptional() role?: string;
   @IsString() @IsOptional() bio?: string;

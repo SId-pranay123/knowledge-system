@@ -1,0 +1,50 @@
+[
+  {
+    "id": "p001",
+    "name": "Ananya Sharma",
+    "role": "Founder & CEO",
+    "email": "ananya@aiconsult.co",
+    "skills": ["Strategy", "Client Management", "AI Product"],
+    "joined": "2023-01-15"
+  },
+  {
+    "id": "p002",
+    "name": "Rahul Mehta",
+    "role": "Senior AI Engineer",
+    "email": "rahul@aiconsult.co",
+    "skills": ["LLM Systems", "RAG", "Backend"],
+    "joined": "2023-03-01"
+  },
+  {
+    "id": "p003",
+    "name": "Priya Nair",
+    "role": "ML Engineer",
+    "email": "priya@aiconsult.co",
+    "skills": ["NLP", "Evaluation", "Data Pipelines"],
+    "joined": "2023-06-12"
+  },
+  {
+    "id": "p004",
+    "name": "Vikram Singh",
+    "role": "Product Manager",
+    "email": "vikram@aiconsult.co",
+    "skills": ["Product", "Research", "Client Workshops"],
+    "joined": "2023-08-20"
+  },
+  {
+    "id": "p005",
+    "name": "Sneha Patel",
+    "role": "Research Analyst",
+    "email": "sneha@aiconsult.co",
+    "skills": ["Domain Research", "Documentation", "Knowledge Management"],
+    "joined": "2024-01-10"
+  },
+  {
+    "id": "p006",
+    "name": "Arjun Reddy",
+    "role": "Full Stack Engineer",
+    "email": "arjun@aiconsult.co",
+    "skills": ["Frontend", "Backend", "Infra"],
+    "joined": "2024-02-15"
+  }
+]

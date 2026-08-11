@@ -15,7 +15,7 @@ import { EntityType, ENTITY_TYPES } from '../relationships/relationships.dto';
 export class QueryService {
   private llm = new ChatGoogleGenerativeAI({
     apiKey: process.env.GEMINI_API_KEY,
-    model: 'gemini-1.5-pro',
+    model: 'gemini-3.6-flash',
     temperature: 0.2,
   });
 
@@ -29,7 +29,8 @@ export class QueryService {
   private async resolveEntityByName(name: string): Promise<{ type: EntityType; id: string } | null> {
     for (const type of ENTITY_TYPES) {
       const table = (this.prisma as any)[type === 'client' ? 'client' : type];
-      const match = await table.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } });
+      const labelField = type === 'decision' ? 'title' : 'name';
+      const match = await table.findFirst({ where: { [labelField]: { equals: name, mode: 'insensitive' } } });
       if (match) return { type, id: match.id };
     }
     return null;

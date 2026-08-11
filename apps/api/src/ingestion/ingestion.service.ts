@@ -29,11 +29,16 @@ export class IngestionService {
   async ingestDocument(params: { title: string; content: string; sourceType: string; sourceUrl?: string }) {
     const contentHash = this.hash(params.content);
 
-    // Delta detection: skip if this exact content was already ingested.
+    // Delta detection: skip if this exact content was already fully ingested.
     const existing = await this.prisma.document.findUnique({ where: { contentHash } });
     if (existing) {
       return { skipped: true, documentId: existing.id, reason: 'unchanged content' };
     }
+
+    // Run extraction BEFORE creating the document row. If this throws (rate
+    // limit, network, bad key), nothing is persisted, so a retry correctly
+    // reprocesses this document instead of silently skipping it forever.
+    const extraction = await this.extraction.extract(params.content, params.title);
 
     const document = await this.prisma.document.create({
       data: {
@@ -44,11 +49,6 @@ export class IngestionService {
         contentHash,
       },
     });
-
-    // 1. Extract entities + relationships via LLM
-    const extraction = await this.extraction.extract(params.content, params.title);
-
-    // 2. Resolve each extracted entity to an existing or new graph node
     const nameToId = new Map<string, { id: string; type: EntityType }>();
     for (const entity of extraction.entities) {
       const id = await this.resolution.resolveOrCreate(entity.type as EntityType, entity.name, entity.attributes);

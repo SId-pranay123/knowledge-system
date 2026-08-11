@@ -8,7 +8,7 @@ import { QueryIntentSchema } from './query.dto';
 export class QueryAnalyzerService {
   private model = new ChatGoogleGenerativeAI({
     apiKey: process.env.GEMINI_API_KEY,
-    model: 'gemini-1.5-flash', // cheaper/faster model is fine for this classification step
+    model: 'gemini-3.5-flash-lite', // cheaper/faster model is fine for this classification step
     temperature: 0,
   }).withStructuredOutput(QueryIntentSchema);
 

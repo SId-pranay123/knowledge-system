@@ -3,11 +3,16 @@ import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 
 // Thin wrapper around Gemini embeddings. Kept behind an interface so swapping
 // providers later (e.g. to OpenAI) only touches this one file.
+//
+// NOTE: gemini-embedding-001 outputs 3072-dim vectors by default. The
+// chunks.embedding column in schema.prisma is vector(3072) to match — if you
+// ever change this model, update both places together (see also
+// resolution.service.ts, which relies on the same dimensionality implicitly).
 @Injectable()
 export class EmbeddingsService {
   private embedder = new GoogleGenerativeAIEmbeddings({
     apiKey: process.env.GEMINI_API_KEY,
-    model: 'text-embedding-004',
+    model: 'gemini-embedding-001',
   });
 
   async embed(text: string): Promise<number[]> {

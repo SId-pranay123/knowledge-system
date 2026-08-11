@@ -1,0 +1,47 @@
+[
+  {
+    "id": "proj001",
+    "name": "Lexora Knowledge Core",
+    "client_id": "c001",
+    "status": "In Progress",
+    "start_date": "2025-09-01",
+    "lead": "p002",
+    "team": ["p002", "p003", "p005"],
+    "description": "Build a structured knowledge system that connects case documents, statutes, internal memos, and lawyer notes. Beyond simple RAG.",
+    "key_topics": ["Legal Knowledge", "Document Linking", "Structured Retrieval"]
+  },
+  {
+    "id": "proj002",
+    "name": "MediSync Protocol Hub",
+    "client_id": "c002",
+    "status": "Discovery",
+    "start_date": "2025-11-15",
+    "lead": "p004",
+    "team": ["p004", "p003", "p001"],
+    "description": "Early exploration of how clinical guidelines, hospital protocols, and research can be connected for faster clinician access.",
+    "key_topics": ["Healthcare Knowledge", "Guideline Linking", "Clinical Decision Support"]
+  },
+  {
+    "id": "proj003",
+    "name": "FinEdge Research Assistant",
+    "client_id": "c003",
+    "status": "Completed",
+    "start_date": "2024-10-01",
+    "end_date": "2025-03-15",
+    "lead": "p002",
+    "team": ["p002", "p006"],
+    "description": "RAG-based assistant over internal research reports and market notes. Delivered and handed over.",
+    "key_topics": ["RAG", "Finance Research", "Report Search"]
+  },
+  {
+    "id": "proj004",
+    "name": "Internal Knowledge Base (v1)",
+    "client_id": null,
+    "status": "In Progress",
+    "start_date": "2025-07-01",
+    "lead": "p005",
+    "team": ["p005", "p006", "p001"],
+    "description": "Our own internal attempt to reduce knowledge scattered across tools. This assignment is related to improving this idea.",
+    "key_topics": ["Internal Knowledge", "Team Memory", "Decision Tracking"]
+  }
+]

@@ -7,11 +7,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 function createPrismaMock() {
   return {
     relationship: {
-      findFirst: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      findMany: jest.fn(),
-      delete: jest.fn(),
+      findFirst: jest.fn<() => Promise<any>>(),
+      create: jest.fn<() => Promise<any>>(),
+      update: jest.fn<() => Promise<any>>(),
+      findMany: jest.fn<() => Promise<any[]>>(),
+      delete: jest.fn<() => Promise<any>>(),
     },
   };
 }
@@ -42,7 +42,7 @@ describe('RelationshipsService', () => {
       prisma.relationship.findFirst.mockResolvedValue(null);
       prisma.relationship.create.mockResolvedValue({ id: 'r1', ...dto, metadata: { ...dto.metadata, mentionCount: 1 } });
 
-      const result = await service.create(dto);
+      const result: any = await service.create(dto);
 
       expect(prisma.relationship.create).toHaveBeenCalledWith({
         data: { ...dto, metadata: { ...dto.metadata, mentionCount: 1 } },
@@ -72,7 +72,8 @@ describe('RelationshipsService', () => {
 
       await service.create({ ...dto, metadata: { context: 'new context', sourceChunkId: 'doc2' } });
 
-      const callArg = prisma.relationship.update.mock.calls[0][0];
+      const updateMock = prisma.relationship.update as jest.Mock;
+      const callArg: any = updateMock.mock.calls[0][0];
       expect(callArg.data.metadata).toMatchObject({
         context: 'new context',
         sourceChunkId: 'doc2',

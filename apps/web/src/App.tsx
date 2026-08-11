@@ -1,15 +1,45 @@
 import { useState } from 'react';
+import Dashboard from './pages/Dashboard';
+import Explorer from './pages/Explorer';
+import EntityDetail from './pages/EntityDetail';
+import GraphView from './pages/GraphView';
+import { setToken } from './api/client';
 
-// Minimal shell — 5 pages per the design: Dashboard, Explorer, Entity Detail,
-// Connections/Graph, Ask AI. Only "Ask AI" is stubbed end-to-end here as the
-// reference; replicate the fetch pattern for the other pages.
+type Route =
+  | { page: 'dashboard' }
+  | { page: 'explorer' }
+  | { page: 'detail'; entityType: string; entityId: string }
+  | { page: 'graph'; entityType: string; entityId: string }
+  | { page: 'ask' };
+
+// Simple state-based routing — 5 pages total, a full router library would be
+// overkill for this scope. Each page navigates by calling setRoute.
 export default function App() {
+  const [route, setRoute] = useState<Route>({ page: 'dashboard' });
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [asking, setAsking] = useState(false);
+
+  async function login() {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: loginUser, password: loginPass }),
+    });
+    if (res.ok) {
+      const { accessToken } = await res.json();
+      setToken(accessToken);
+      setLoggedIn(true);
+    } else {
+      alert('Login failed');
+    }
+  }
 
   async function ask() {
-    setLoading(true);
+    setAsking(true);
     const res = await fetch('/api/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -17,20 +47,76 @@ export default function App() {
     });
     const data = await res.json();
     setAnswer(data.answer);
-    setLoading(false);
+    setAsking(false);
   }
 
+  const nav = {
+    toDashboard: () => setRoute({ page: 'dashboard' }),
+    toExplorer: () => setRoute({ page: 'explorer' }),
+    toDetail: (entityType: string, entityId: string) => setRoute({ page: 'detail', entityType, entityId }),
+    toGraph: (entityType: string, entityId: string) => setRoute({ page: 'graph', entityType, entityId }),
+    toAsk: () => setRoute({ page: 'ask' }),
+  };
+
   return (
-    <div style={{ maxWidth: 640, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <h1>Ask the knowledge base</h1>
-      <textarea
-        value={question}
-        onChange={(e) => setQuestion(e.target.value)}
-        placeholder="What did FinEdge teach us that influenced Lexora?"
-        style={{ width: '100%', height: 80 }}
-      />
-      <button onClick={ask} disabled={loading}>{loading ? 'Asking...' : 'Ask'}</button>
-      {answer && <div style={{ marginTop: 20, whiteSpace: 'pre-wrap' }}>{answer}</div>}
+    <div>
+      <nav style={{ display: 'flex', gap: 16, padding: 16, borderBottom: '1px solid #eee', fontFamily: 'sans-serif' }}>
+        <a onClick={nav.toDashboard} style={{ cursor: 'pointer' }}>Dashboard</a>
+        <a onClick={nav.toExplorer} style={{ cursor: 'pointer' }}>Explorer</a>
+        <a onClick={nav.toAsk} style={{ cursor: 'pointer' }}>Ask AI</a>
+        <div style={{ marginLeft: 'auto' }}>
+          {loggedIn ? (
+            <span style={{ color: '#0a0' }}>Logged in</span>
+          ) : (
+            <span style={{ display: 'flex', gap: 6 }}>
+              <input placeholder="user" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} style={{ width: 80 }} />
+              <input placeholder="pass" type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} style={{ width: 80 }} />
+              <button onClick={login}>Login</button>
+            </span>
+          )}
+        </div>
+      </nav>
+
+      {route.page === 'dashboard' && <Dashboard onNavigate={(p) => (p === 'ask' ? nav.toAsk() : nav.toExplorer())} />}
+
+      {route.page === 'explorer' && <Explorer onSelect={nav.toDetail} />}
+
+      {route.page === 'detail' && (
+        <>
+          <EntityDetail
+            entityType={route.entityType}
+            entityId={route.entityId}
+            onSelect={nav.toDetail}
+            onBack={nav.toExplorer}
+          />
+          <div style={{ textAlign: 'center', marginTop: -16, marginBottom: 40 }}>
+            <button onClick={() => nav.toGraph(route.entityType, route.entityId)}>View connections graph →</button>
+          </div>
+        </>
+      )}
+
+      {route.page === 'graph' && (
+        <>
+          <div style={{ maxWidth: 800, margin: '16px auto 0', textAlign: 'right' }}>
+            <button onClick={() => nav.toDetail(route.entityType, route.entityId)}>← Back to details</button>
+          </div>
+          <GraphView entityType={route.entityType} entityId={route.entityId} onSelect={nav.toGraph} />
+        </>
+      )}
+
+      {route.page === 'ask' && (
+        <div style={{ maxWidth: 640, margin: '40px auto', fontFamily: 'sans-serif' }}>
+          <h1>Ask the knowledge base</h1>
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="What did we learn from FinEdge that is useful for Lexora?"
+            style={{ width: '100%', height: 80 }}
+          />
+          <button onClick={ask} disabled={asking}>{asking ? 'Asking...' : 'Ask'}</button>
+          {answer && <div style={{ marginTop: 20, whiteSpace: 'pre-wrap' }}>{answer}</div>}
+        </div>
+      )}
     </div>
   );
 }

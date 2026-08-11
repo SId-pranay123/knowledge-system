@@ -5,18 +5,25 @@ import { EmbeddingsService } from '../../embeddings/embeddings.service';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 function createPrismaMock() {
-  const project = { findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn() };
+  const project = {
+    findFirst: jest.fn<() => Promise<{ id: string; name: string } | null>>(),
+    findMany: jest.fn<() => Promise<Array<{ id: string; name: string }>>>(),
+    create: jest.fn<() => Promise<{ id: string; name: string }>>(),
+  };
   return { project };
 }
 
 describe('ResolutionService', () => {
   let service: ResolutionService;
   let prisma: ReturnType<typeof createPrismaMock>;
-  let embeddings: { embed: jest.Mock; cosineSimilarity: jest.Mock };
+  let embeddings: any;
 
   beforeEach(async () => {
     prisma = createPrismaMock();
-    embeddings = { embed: jest.fn(), cosineSimilarity: jest.fn() };
+    embeddings = {
+      embed: jest.fn(async () => [0.1, 0.2, 0.3]),
+      cosineSimilarity: jest.fn(),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [

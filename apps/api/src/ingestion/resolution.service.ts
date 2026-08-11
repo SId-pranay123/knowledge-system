@@ -43,6 +43,20 @@ function acronymMatch(mentionRaw: string, candidateRaw: string): boolean {
   return remainingCandidateInitials === remainingMention;
 }
 
+// Solves the "same entity, different mention" problem: "Lexora" vs "the Lexora
+// project" vs "Lexora Knowledge Core" must resolve to one row, not three.
+// Strategy, cheapest to most expensive: exact match -> alias match -> substring
+// containment -> acronym match -> token-overlap (Dice) -> embedding similarity.
+//
+// Used from two places: IngestionService (resolveOrCreate — creates a new
+// node if nothing matches) and QueryService (findMatch — returns null if
+// nothing matches, since a user's question shouldn't create graph nodes).
+// Both MUST share this exact matching logic; a query-side entity resolution
+// that's weaker than ingestion's (e.g. exact-match-only) silently breaks
+// graph traversal whenever a question uses a short/partial name — the
+// traversal step gets skipped entirely with no error, and the system falls
+// back to vector search alone, which is precisely the "weak answer" pattern
+// this assignment scores against.
 @Injectable()
 export class ResolutionService {
   private readonly SIMILARITY_THRESHOLD = 0.88;
@@ -84,7 +98,9 @@ export class ResolutionService {
     return Object.fromEntries(Object.entries(attributes).filter(([key]) => allowed.includes(key)));
   }
 
-  async resolveOrCreate(type: EntityType, name: string, attributes: Record<string, any> = {}): Promise<string> {
+  // Core matching logic, shared by both public methods below. Returns the id
+  // of the best match, or null if nothing cleared the bar.
+  private async findBestMatch(type: EntityType, name: string): Promise<string | null> {
     const table = this.tableFor(type);
     const labelField = this.labelFieldFor(type);
 
@@ -138,8 +154,26 @@ export class ResolutionService {
       if (best && best.score >= this.SIMILARITY_THRESHOLD) return best.id;
     }
 
+    return null;
+  }
+
+  // Used during ingestion: resolve to an existing node, or create one if
+  // nothing matches.
+  async resolveOrCreate(type: EntityType, name: string, attributes: Record<string, any> = {}): Promise<string> {
+    const match = await this.findBestMatch(type, name);
+    if (match) return match;
+
+    const table = this.tableFor(type);
+    const labelField = this.labelFieldFor(type);
     const safeAttributes = this.sanitizeAttributes(type, attributes);
     const created = await table.create({ data: { [labelField]: name, ...safeAttributes } });
     return created.id;
+  }
+
+  // Used during query answering: find a match, or return null. Never creates
+  // a node — a user's question mentioning an entity should not add it to the
+  // graph.
+  async findMatch(type: EntityType, name: string): Promise<string | null> {
+    return this.findBestMatch(type, name);
   }
 }

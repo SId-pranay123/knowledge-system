@@ -11,6 +11,6 @@ import { RelationshipsModule } from '../relationships/relationships.module';
   imports: [EmbeddingsModule, RelationshipsModule],
   controllers: [IngestionController],
   providers: [IngestionService, ExtractionService, ResolutionService, ChunkingService],
-  exports: [IngestionService],
+  exports: [IngestionService, ResolutionService],
 })
 export class IngestionModule {}

@@ -4,9 +4,10 @@ import { QueryController } from './query.controller';
 import { QueryAnalyzerService } from './query-analyzer.service';
 import { EmbeddingsModule } from '../embeddings/embeddings.module';
 import { RelationshipsModule } from '../relationships/relationships.module';
+import { IngestionModule } from '../ingestion/ingestion.module';
 
 @Module({
-  imports: [EmbeddingsModule, RelationshipsModule],
+  imports: [EmbeddingsModule, RelationshipsModule, IngestionModule],
   controllers: [QueryController],
   providers: [QueryService, QueryAnalyzerService],
 })

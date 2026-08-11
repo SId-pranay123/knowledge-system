@@ -11,6 +11,7 @@ import { TopicsModule } from './topics/topics.module';
 import { RelationshipsModule } from './relationships/relationships.module';
 import { EmbeddingsModule } from './embeddings/embeddings.module';
 import { IngestionModule } from './ingestion/ingestion.module';
+import { NotionModule } from './notion/notion.module';
 import { QueryModule } from './query/query.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { QueryModule } from './query/query.module';
     RelationshipsModule,
     EmbeddingsModule,
     IngestionModule,
+    NotionModule,
     QueryModule,
   ],
 })

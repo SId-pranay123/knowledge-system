@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ---------- Core entities ----------
+
+model Person {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?  @unique
+  role      String?
+  bio       String?
+  aliases   String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("people")
+}
+
+model Client {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  projects    Project[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("clients")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  status      String   @default("ACTIVE")
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("projects")
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  title       String
+  sourceType  String   // LOCAL | GOOGLE_DOC | SLACK | MANUAL
+  sourceUrl   String?
+  content     String
+  contentHash String   @unique // used for delta detection on re-ingestion
+  chunks      Chunk[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("documents")
+}
+
+model Chunk {
+  id             String                @id @default(uuid())
+  documentId     String
+  document       Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content        String
+  chunkIndex     Int
+  embedding      Unsupported("vector(768)")?
+  createdAt      DateTime              @default(now())
+
+  @@map("chunks")
+}
+
+model Decision {
+  id                   String     @id @default(uuid())
+  title                String
+  description          String?
+  reasoning            String?
+  decisionDate         DateTime?
+  status               String     @default("ACTIVE") // ACTIVE | SUPERSEDED | REJECTED | PROPOSED
+  supersedesDecisionId String?
+  supersedesDecision   Decision?  @relation("DecisionSupersedes", fields: [supersedesDecisionId], references: [id])
+  supersededBy         Decision[] @relation("DecisionSupersedes")
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@map("decisions")
+}
+
+model Topic {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("topics")
+}
+
+// ---------- The graph ----------
+// Polymorphic edges: (sourceType, sourceId) --relationshipType--> (targetType, targetId)
+// This table is the knowledge graph. Traversal = SQL queries against it.
+
+model Relationship {
+  id               String   @id @default(uuid())
+  sourceType       String   // 'person' | 'project' | 'client' | 'document' | 'decision' | 'topic'
+  sourceId         String
+  relationshipType String   // 'WORKED_ON' | 'HAS_DECISION' | 'MADE_BY' | 'SUPERSEDES' | 'INFLUENCED_BY' | 'ABOUT' | 'DISCUSSED_IN' | ...
+  targetType       String
+  targetId         String
+  metadata         Json?    // { confidence, sourceChunkId, extractedAt, mentionCount }
+  createdAt        DateTime @default(now())
+
+  @@index([sourceType, sourceId])
+  @@index([targetType, targetId])
+  @@index([relationshipType])
+  @@map("relationships")
+}

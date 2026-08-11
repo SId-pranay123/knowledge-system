@@ -1,3 +1,138 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --app-accent: #2563eb;
+  --app-accent-soft: #eaf2ff;
+  --app-header-bg: #fafafa;
+  --app-border: #e5e7eb;
+  --app-text: #1f2937;
+  --app-muted: #6b7280;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  font-family: sans-serif;
+  color: var(--app-text);
+  background: #f8fafc;
+}
+
+body {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 20px 32px;
+}
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  margin: 0 -20px;
+  background: var(--app-header-bg);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.nav-link {
+  color: var(--app-text);
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.nav-link:hover,
+.nav-link:focus-visible {
+  color: var(--app-accent);
+}
+
+.nav-link.active {
+  color: var(--app-accent);
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.primary-button:hover,
+.secondary-button:hover,
+.ghost-button:hover,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+.ghost-button:focus-visible {
+  transform: translateY(-1px);
+}
+
+.primary-button {
+  background: var(--app-accent);
+  color: white;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
+}
+
+.primary-button:hover,
+.primary-button:focus-visible {
+  background: #1d4ed8;
+}
+
+.secondary-button {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+.secondary-button:hover,
+.secondary-button:focus-visible {
+  background: #dbeafe;
+}
+
+.ghost-button {
+  background: white;
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+.ghost-button:hover,
+.ghost-button:focus-visible {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.accent-tab {
+  background: var(--app-accent) !important;
+  color: white !important;
+  border: 1px solid var(--app-accent) !important;
+}
+
+.accent-tab-inactive {
+  background: #f3f4f6 !important;
+  color: var(--app-text) !important;
+  border: 1px solid var(--app-border) !important;
+}

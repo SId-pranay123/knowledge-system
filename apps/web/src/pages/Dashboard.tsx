@@ -73,7 +73,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: string) =
         ))}
       </div>
       <div style={{ marginTop: 32 }}>
-        <button onClick={() => onNavigate('ask')} style={{ padding: '10px 20px', fontSize: 16 }}>
+        <button className="primary-button" onClick={() => onNavigate('ask')}>
           Ask a question →
         </button>
       </div>

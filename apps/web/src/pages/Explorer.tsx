@@ -41,13 +41,10 @@ export default function Explorer({ onSelect }: { onSelect: (type: EntityType, id
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
+            className={activeTab === t.key ? 'primary-button' : 'secondary-button'}
             style={{
-              padding: '6px 14px',
-              background: activeTab === t.key ? '#333' : '#eee',
-              color: activeTab === t.key ? '#fff' : '#000',
-              border: 'none',
-              borderRadius: 6,
-              cursor: 'pointer',
+              padding: '8px 14px',
+              borderRadius: 8,
             }}
           >
             {t.label}

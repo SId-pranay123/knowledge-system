@@ -66,7 +66,7 @@ export default function GraphView({
 
   return (
     <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <h2>Connections: {centerLabel}</h2>
+      <h2 style={{ color: '#1f2937' }}>Connections: {centerLabel}</h2>
       {nodes.length === 0 && <p style={{ color: '#999' }}>No connections to show.</p>}
       <svg width={width} height={height} style={{ border: '1px solid #eee', borderRadius: 8 }}>
         {positioned.map((n) => (

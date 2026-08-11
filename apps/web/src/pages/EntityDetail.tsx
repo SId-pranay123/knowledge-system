@@ -73,7 +73,7 @@ export default function EntityDetail({
 
   return (
     <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <button onClick={onBack} style={{ marginBottom: 16 }}>← Back</button>
+      <button onClick={onBack} className="ghost-button" style={{ marginBottom: 16 }}>← Back</button>
       <h1>{label}</h1>
       {entity.description && <p style={{ color: '#444' }}>{entity.description}</p>}
       {entity.reasoning && (

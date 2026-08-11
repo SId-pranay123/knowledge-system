@@ -59,19 +59,34 @@ export default function App() {
   };
 
   return (
-    <div>
-      <nav style={{ display: 'flex', gap: 16, padding: 16, borderBottom: '1px solid #eee', fontFamily: 'sans-serif' }}>
-        <a onClick={nav.toDashboard} style={{ cursor: 'pointer' }}>Dashboard</a>
-        <a onClick={nav.toExplorer} style={{ cursor: 'pointer' }}>Explorer</a>
-        <a onClick={nav.toAsk} style={{ cursor: 'pointer' }}>Ask AI</a>
+    <div className="app-shell">
+      <nav className="top-nav">
+        <a
+          onClick={nav.toDashboard}
+          className={`nav-link ${route.page === 'dashboard' ? 'active' : ''}`}
+        >
+          Dashboard
+        </a>
+        <a
+          onClick={nav.toExplorer}
+          className={`nav-link ${route.page === 'explorer' ? 'active' : ''}`}
+        >
+          Explorer
+        </a>
+        <a
+          onClick={nav.toAsk}
+          className={`nav-link ${route.page === 'ask' ? 'active' : ''}`}
+        >
+          Ask AI
+        </a>
         <div style={{ marginLeft: 'auto' }}>
           {loggedIn ? (
-            <span style={{ color: '#0a0' }}>Logged in</span>
+            <span style={{ color: '#0a0', fontWeight: 600 }}>Logged in</span>
           ) : (
-            <span style={{ display: 'flex', gap: 6 }}>
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <input placeholder="user" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} style={{ width: 80 }} />
               <input placeholder="pass" type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} style={{ width: 80 }} />
-              <button onClick={login}>Login</button>
+              <button className="primary-button" onClick={login}>Login</button>
             </span>
           )}
         </div>
@@ -90,7 +105,9 @@ export default function App() {
             onBack={nav.toExplorer}
           />
           <div style={{ textAlign: 'center', marginTop: -16, marginBottom: 40 }}>
-            <button onClick={() => nav.toGraph(route.entityType, route.entityId)}>View connections graph →</button>
+            <button className="primary-button" onClick={() => nav.toGraph(route.entityType, route.entityId)}>
+              View connections graph →
+            </button>
           </div>
         </>
       )}
@@ -98,7 +115,9 @@ export default function App() {
       {route.page === 'graph' && (
         <>
           <div style={{ maxWidth: 800, margin: '16px auto 0', textAlign: 'right' }}>
-            <button onClick={() => nav.toDetail(route.entityType, route.entityId)}>← Back to details</button>
+            <button className="ghost-button" onClick={() => nav.toDetail(route.entityType, route.entityId)}>
+              ← Back to details
+            </button>
           </div>
           <GraphView entityType={route.entityType} entityId={route.entityId} onSelect={nav.toGraph} />
         </>
@@ -113,7 +132,9 @@ export default function App() {
             placeholder="What did we learn from FinEdge that is useful for Lexora?"
             style={{ width: '100%', height: 80 }}
           />
-          <button onClick={ask} disabled={asking}>{asking ? 'Asking...' : 'Ask'}</button>
+          <button className="primary-button" onClick={ask} disabled={asking} style={{ marginTop: 12 }}>
+            {asking ? 'Asking...' : 'Ask'}
+          </button>
           {answer && <div style={{ marginTop: 20, whiteSpace: 'pre-wrap' }}>{answer}</div>}
         </div>
       )}

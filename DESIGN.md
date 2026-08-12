@@ -18,10 +18,11 @@ Single-database design: PostgreSQL with the pgvector extension.
 
 ```
 React (Vite) ──REST──> NestJS API ──> PostgreSQL + pgvector
-                                        (entities, relationships, chunks, embeddings)
+                                        (entities, relationships, chunks, embeddings,
+                                         conversations, messages)
                             │
                             └──> Gemini (via LangChain JS)
-                                  extraction / query analysis / answer synthesis
+                                  extraction / query analysis / answer synthesis / embeddings
 ```
 
 Sources: sample JSON/markdown/Slack-export files (static, as provided) + one real integration (Notion — see §9 for why Notion over Google Docs).
@@ -34,9 +35,9 @@ Microsoft's GraphRAG builds community summaries via Leiden clustering over the w
 
 ## 3. Data model
 
-Six core entities: `Person`, `Client`, `Project`, `Document`, `Decision`, `Topic`.
+Core entities: `Person`, `Client`, `Project`, `Document`, `Decision`, `Topic`. Chat history entities: `Conversation`, `Message`.
 
-Note: `Person`/`Client`/`Project`/`Topic` use a `name` field; `Decision` and `Document` use `title` instead. This inconsistency is a real thing to know about the schema — it caused two runtime bugs during development (code that assumed every entity type had `.name`) before being made explicit and handled via a `labelFieldFor(type)` lookup wherever entity labels are resolved.
+Note: `Person`/`Client`/`Project`/`Topic` use a `name` field; `Decision` and `Document` use `title` instead. This inconsistency caused two separate runtime bugs during development (code that assumed every entity type had `.name`) before being made explicit and handled via a `labelFieldFor(type)` lookup wherever entity labels are resolved, in both `ResolutionService` and `QueryService`.
 
 The graph lives in one polymorphic table:
 
@@ -49,18 +50,20 @@ targetType, targetId
 metadata                (confidence, sourceChunkId, extractedAt, mentionCount, source: 'structured-seed' | undefined)
 ```
 
-This table is the knowledge graph. Every fact the system states is traceable to a source document via `metadata.sourceChunkId`, or marked `metadata.source: 'structured-seed'` when it came directly from the provided structured JSON (`projects.json`'s `team`/`lead`/`key_topics`, `decisions.json`'s `made_by`/`participants`/`related_topics`) rather than LLM extraction.
+Every fact the system states is traceable to a source document via `metadata.sourceChunkId`, or marked `metadata.source: 'structured-seed'` when it came directly from the provided structured JSON rather than LLM extraction.
 
-`Decision` additionally carries `status` (ACTIVE / SUPERSEDED / REJECTED / PROPOSED) and `supersedesDecisionId`, so decision evolution is modeled explicitly — directly answering the assignment's decision-lineage style examples. Setting `supersedesDecisionId` on update automatically flips the prior decision's status to `SUPERSEDED`.
+`Decision` carries `status` (ACTIVE / SUPERSEDED / REJECTED / PROPOSED) and `supersedesDecisionId`; setting the latter on update automatically flips the prior decision's status to `SUPERSEDED`.
 
-`Document` carries a unique `contentHash` — this is the delta-detection key. Re-ingesting unchanged content is a no-op. Content is hashed and extraction is run *before* the document row is created, so an interrupted/failed extraction (bad API key, rate limit, network error) doesn't leave a "ghost" document that gets incorrectly treated as already-processed on retry.
+`Document` carries a unique `contentHash` for delta detection. Extraction runs *before* the document row is created, so an interrupted/failed extraction doesn't leave a "ghost" document that gets incorrectly treated as already-processed on retry.
 
-`Chunk` holds raw text + a pgvector embedding column (`vector(3072)`, matching `gemini-embedding-001`'s output dimension), for the vector-search half of retrieval.
+`Chunk` holds raw text + a pgvector embedding column (`vector(3072)`, matching `gemini-embedding-001`'s output dimension).
+
+`Conversation`/`Message` support chat history: each `Conversation` is one session (like a Claude/ChatGPT thread); each `Message` is one persisted question+answer pair, including the resolved entities/relationships/sources from that query run. Revisiting a past conversation is a plain DB read — nothing is recomputed, no LLM calls are re-run.
 
 ## 4. Ingestion pipeline
 
 ```
-Document arrives (sample file, Slack export, or Notion page)
+Document arrives (sample file, Slack export, or Notion page via the Sources UI)
   → hash content
   → hash already seen? → skip (delta detection, no reprocessing)
   → otherwise:
@@ -72,86 +75,91 @@ Document arrives (sample file, Slack export, or Notion page)
       → chunk document → embed each chunk → store in pgvector
 ```
 
-Structured sample data (`people.json`, `clients.json`, `projects.json`, `decisions.json`, `topics.json`) already contains explicit relationships (`client_id`, `team`, `lead`, `made_by`, `participants`, `related_topics`) — these are inserted directly as graph edges during seeding, bypassing LLM extraction entirely, since the structure is already known and unambiguous. LLM extraction is reserved for genuinely unstructured sources (markdown docs, Slack messages, Notion pages) where relationships only exist in prose.
+Structured sample data (`people.json`, `clients.json`, `projects.json`, `decisions.json`, `topics.json`) already contains explicit relationships (`client_id`, `team`, `lead`, `made_by`, `participants`, `related_topics`) — these are inserted directly as graph edges during seeding, bypassing LLM extraction entirely. LLM extraction is reserved for unstructured sources where relationships only exist in prose.
 
 ### Entity resolution — six-step matching
 
-The same real-world entity gets mentioned inconsistently across documents and via LLM paraphrasing ("Lexora" / "the Lexora project" / "Internal KB" for "Internal Knowledge Base (v1)"). Grounding the extraction prompt with known entity names reduces this but does not eliminate it — LLMs do not reliably follow "use this exact name" instructions even at temperature 0, since the model's most natural phrasing of what the text says can still diverge from the instruction. Resolution therefore layers multiple deterministic checks, cheapest/most-certain first:
+The same real-world entity gets mentioned inconsistently across documents and via LLM paraphrasing ("Lexora" / "the Lexora project" / "Internal KB" for "Internal Knowledge Base (v1)"). Grounding the extraction prompt with known entity names reduces this but does not eliminate it — LLMs do not reliably follow "use this exact name" instructions even at temperature 0. Resolution layers multiple deterministic checks, cheapest/most-certain first:
 
 1. **Exact match** — case-insensitive string equality on the entity's label field
 2. **Alias match** — a stored `aliases` array (currently populated for `Person`, e.g. first-name aliases so "Rahul" resolves to "Rahul Mehta")
 3. **Substring containment** — catches partial mentions like "Lexora" contained within "Lexora Knowledge Core"
 4. **Acronym match** — catches abbreviations like "Internal KB" vs "Internal Knowledge Base": if the mention and a candidate share a literal first word, and the mention's remaining word is a short all-caps token, it's checked against the initials of the candidate's remaining words
-5. **Token-overlap (Dice coefficient)** — catches shared-word-prefix variants with different suffixes, e.g. "Internal Knowledge Base – Vision" vs "Internal Knowledge Base (v1)" (high overlap on "internal"/"knowledge"/"base" despite different endings)
+5. **Token-overlap (Dice coefficient)** — catches shared-word-prefix variants with different suffixes, e.g. "Internal Knowledge Base – Vision" vs "Internal Knowledge Base (v1)"
 6. **Embedding similarity** — last-resort semantic match for phrasings with no literal/structural overlap at all
 
-Only if none of these match is a new entity created. This layered approach exists because no single technique (prompting, exact match, or embeddings alone) reliably prevented duplicate entity creation during testing — each layer catches a distinct failure mode the others miss.
+This matching logic (`ResolutionService.findBestMatch`) is shared between two entry points: `resolveOrCreate` (used during ingestion — creates a new node if nothing matches) and `findMatch` (used during query answering — returns null if nothing matches, since a user's question should never create a graph node). Both **must** share this logic; an earlier version had the query pipeline doing its own weaker exact-match-only lookup, which caused a real bug (see §5).
 
-LLM-extracted "attributes" (free-form key-value pairs the model returns per entity, e.g. a `date` field for a decision) are filtered against a per-type allowlist before being written to the database, since the model's attribute keys don't reliably match actual column names and would otherwise cause a runtime error on entity creation.
+LLM-extracted "attributes" (free-form key-value pairs) are filtered against a per-type allowlist before being written to the database, since the model's attribute keys don't reliably match actual column names.
+
+**Verification:** after a full seed reset with this matching logic in place, a duplicate check across `people`, `projects`, `decisions`, and `topics` returned zero duplicate rows. Separately, ingesting a freshly-written Notion page (not part of the original sample data) that mentioned existing entities ("Ananya Sharma," "Arjun Reddy," "Lexora Knowledge Core," "FinEdge Research Assistant") by name correctly resolved all of them to their existing rows rather than creating duplicates — confirming the fix holds on genuinely new content, not just the original test case.
 
 ## 5. Query pipeline
 
 ```
 Question
-  → LLM extracts entities mentioned + intent (excludes 'document' type — a
-    document row is not a named entity a user would reference by title)
-  → resolve entity names against existing graph nodes (same label-field-aware
-    lookup as ingestion: title for Decision, name for everything else)
+  → LLM extracts entities mentioned + intent (excludes 'document' type)
+  → resolve entity names against existing graph nodes via
+    ResolutionService.findMatch — the SAME matching logic ingestion uses
   → traverse relationships table 1–2 hops from each resolved entity
   → vector search over chunks (pgvector cosine distance)
+  → resolve human-readable labels for every graph fact (not raw UUIDs)
   → combine graph facts + retrieved chunks into context
-  → LLM synthesizes answer, citing sources
+  → LLM synthesizes answer (explicitly instructed to be exhaustive — list
+    every relevant person/decision, not just the first one), citing sources
 ```
 
-This is what turns document-similarity search into a connected answer: the graph traversal supplies the structured facts (who, what decision, made by whom), and the vector search supplies supporting narrative/reasoning text the graph doesn't capture. Neither alone satisfies the assignment's "strong answer" bar — the combination does.
+**Bug found and fixed during development:** the query pipeline originally had its own, weaker, exact-match-only entity resolution instead of reusing `ResolutionService`. A question saying "Lexora" never matched the actual entity "Lexora Knowledge Core," so graph traversal silently returned nothing, and the system fell back to whatever a single vector-searched chunk happened to say — producing an incomplete answer (named one team member instead of three, omitted the decision-maker and date) despite the underlying graph data being fully correct. Fixed by extracting `findBestMatch` as shared logic and having `QueryService` call `ResolutionService.findMatch` instead of a separate implementation. A second, compounding issue — the graph context sent to the synthesis LLM used raw UUIDs instead of resolved names — was fixed at the same time.
 
-**Known gap (see §7):** manual testing against the assignment's own example question ("Who worked on the Lexora project and what key decisions were made about its approach?") returned a partially complete answer — it named only one of three actual team members and omitted who made the decision and when, despite that data existing in the graph. This needs further investigation into whether the gap is in retrieval (traversal not returning all edges) or synthesis (the prompt not instructing the LLM to surface every result exhaustively).
+**Verification:** after both fixes, the assignment's own Example 1 question ("Who worked on the Lexora project and what key decisions were made about its approach?") returns all three team members (lead + two contributors), the decision content, who made it, and when — matching their "strong answer" definition. A second test, ingesting a new Notion page describing a hypothetical GreenGrid project that explicitly reuses lessons from Lexora and FinEdge, produced a correctly connected multi-hop answer citing the decision chain across all three projects with proposer, participants, and reasoning — this is essentially their Example 2 scenario, one hop further out, on content that didn't exist in the original sample data.
 
 ## 6. Tech stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | React (Vite), plain fetch + inline styles, no CSS framework |
-| Backend | NestJS, service/repository separation per module |
+| Frontend | React (Vite), plain CSS/inline styles with consistent shared classes, `react-markdown` for rendering LLM answers |
+| Backend | NestJS, service/repository separation per module (see §7 for known gaps) |
 | Database | PostgreSQL + pgvector extension |
 | ORM | Prisma |
-| LLM | Gemini (gemini-3.6-flash for extraction/synthesis, gemini-3.5-flash-lite for query classification, gemini-embedding-001 for embeddings) via LangChain JS |
+| LLM | Gemini (`gemini-3.6-flash` for extraction/synthesis, `gemini-3.5-flash-lite` for query classification, `gemini-embedding-001` for embeddings) via LangChain JS |
 | Auth | JWT (NestJS + Passport), single shared credential pair from env — no user table |
 | Real integration | Notion API (internal integration token) |
 
 ## 7. What's incomplete / known issues
 
-- **Query-answer completeness gap** (see §5) — needs investigation before this can confidently be called a "strong answer" system by the assignment's own rubric
-- **Global graph view** — the current Graph/Connections page only shows a 1-hop neighborhood centered on one entity; a whole-graph overview (all entities + edges at once) does not yet exist
-- **Google Docs integration was built but is not the shipped real integration** (see §9) — the code exists (src/google-docs/) and is architecturally complete, but auth could not be reliably established within this assignment's time budget; Notion was substituted as the working, tested real source instead
-- **UI is functional but not visually polished** — plain styling, no design system; deprioritized in favor of correctness and completeness of the data/query pipeline, which is what the assignment's grading criteria actually emphasize
-- **No caching layer for repeated embedding calls** during entity resolution — every resolution call re-embeds candidate labels; fine at this scale (hundreds of entities), would need caching at a larger scale
-- **Ingestion pipeline's direct Prisma calls are not extracted into a repository layer**, unlike the CRUD modules (people, clients, etc.), which went through a service/repository refactor — left inconsistent due to time constraints
+- **Global graph view density** — the whole-graph view can get visually cluttered at higher entity counts (25+ topics); a type-filter/pan-zoom pass is in progress
+- **Google Docs integration was built but is not the shipped real integration** (see §9) — the code exists (`src/google-docs/`) and is architecturally complete, but auth could not be reliably established within this assignment's time budget; Notion was substituted as the working, tested real source instead
+- **No caching layer for repeated embedding calls** during entity resolution — every resolution call re-embeds candidate labels; fine at this scale, would need caching at a larger scale
+- **Repository-pattern inconsistency** — `people`, `clients`, `projects`, `decisions`, `topics`, `relationships`, and `conversations` all separate Prisma access into a `*.repository.ts` file from business logic in `*.service.ts`. `ingestion` and `google-docs` do not — their services call Prisma directly. Left as a known, documented gap rather than silently inconsistent.
+- **No answer caching/dedup** for repeated identical questions — each question re-runs the full pipeline (LLM calls included) even if asked before in a different conversation; chat history persists past answers for browsing, but doesn't short-circuit a fresh identical question.
+- **LLM provider is hardcoded to the direct Gemini API** — a second option (Vertex AI, via a separately-provided shared key with its own quota) is planned but not yet implemented. The intended design is a provider abstraction behind a shared interface (`ChatModelProvider`, `EmbeddingsModelProvider`) so `ExtractionService`, `QueryService`, etc. depend on the abstraction, not a concrete SDK class, and the concrete implementation (direct API key vs Vertex service account) is selected once at startup based on which credentials are present.
 
 ## 8. Trade-offs
 
 | Decision | Trade-off |
 |---|---|
 | Postgres+pgvector over Neo4j | Traversal capped at a few hops before SQL joins get unwieldy — acceptable at this scale |
-| LLM-based extraction | Imperfect recall/precision — mitigated by a six-layer resolution pipeline (§4) and human-editable CRUD, not by trying to make extraction itself perfect |
+| LLM-based extraction | Imperfect recall/precision — mitigated by a six-layer resolution pipeline (§4) shared across ingestion and query, not by trying to make extraction itself perfect |
 | Notion over Google Docs as the real integration | See §9 |
 | Re-embedding candidates on every resolution call | Simple to implement, fine at hundreds of entities |
-| No auth beyond basic JWT | Matches "basic authentication is enough," not production RBAC |
-| No repository layer for ingestion | Inconsistent with other modules' structure; acceptable trade given time constraints, noted as a known gap rather than hidden |
+| No auth beyond basic JWT, and only on write endpoints | Reads (browsing, asking questions) are intentionally public; only mutations are gated — matches a small internal team's shared-knowledge-base use case rather than a stricter per-user access model |
+| No repository layer for ingestion/google-docs | Inconsistent with other modules' structure; acceptable trade given time constraints, noted as a known gap rather than hidden |
 
 ## 9. Why Notion instead of Google Docs
 
 The original plan was Google Docs, since it's the assignment's own example of an acceptable single integration. Two independent Google Cloud auth obstacles made this impractical within the assignment's time budget on a personal/free-tier Google Cloud project:
 
-1. **Service account key creation is blocked by an organization policy** (iam.disableServiceAccountKeyCreation, and its newer .managed counterpart) that requires Organization Policy Administrator rights to override — not available on this project, and not something that should require elevating account privileges just to run a take-home demo.
-2. **The fallback (OAuth via Application Default Credentials with a custom client ID) hit a separate wall**: Google's "unverified app" and "restricted test user" protections, which require either publishing the OAuth app (a real verification process, not appropriate for a throwaway assignment) or manually allow-listing test users, and even then the flow's redirect/callback handling proved unreliable in practice within the CLI tooling.
+1. **Service account key creation is blocked by an organization policy** (`iam.disableServiceAccountKeyCreation`, and its newer `.managed` counterpart) that requires Organization Policy Administrator rights to override — not available on this project.
+2. **The fallback (OAuth via Application Default Credentials with a custom client ID) hit a separate wall**: Google's "unverified app" and "restricted test user" protections, plus unreliable redirect/callback handling in the CLI tooling itself.
 
-Rather than continuing to spend disproportionate time on Google Cloud's auth infrastructure for a component the assignment explicitly marks as optional ("only if time permits"), the pragmatic choice was to substitute Notion, which the assignment also lists as a plausible team knowledge source. Notion's integration model is a static API token (create an integration, share a page with it, done) — no OAuth, no service accounts, no organization policies. This is architecturally equivalent for the purposes of this assignment (fetch external content, flatten to plain text, feed into the same ingestDocument() pipeline used for every other source) and was successfully tested end-to-end.
+Notion's integration model is a static API token (create an integration, share a page with it) — no OAuth, no service accounts, no organization policies. This is architecturally equivalent for this assignment's purposes (fetch external content, flatten to plain text, feed into the same `ingestDocument()` pipeline used for every other source) and was tested end-to-end successfully, including a one-click "Sources" page (`GET /api/ingest/notion/pages` lists every page shared with the integration, cross-referenced against what's already ingested) rather than requiring a manually copy-pasted page ID.
 
-The Google Docs implementation (src/google-docs/) is left in the repository as evidence of the intended design and is functionally complete code — it was the auth layer specifically, not the integration logic, that could not be resolved within scope.
+The Google Docs implementation (`src/google-docs/`) is left in the repository as evidence of the intended design — it was the auth layer specifically, not the integration logic, that could not be resolved within scope.
 
 ## 10. How to run and test
 
-See README.md for setup steps (docker compose up, npm run db:migrate, npm run db:seed, npm run dev:api, npm run dev:web).
+See `README.md` for setup steps (`docker compose up`, `npm run db:migrate`, `npm run db:seed`, `npm run dev:api`, `npm run dev:web`).
 
-Testing approach: unit tests on RelationshipsService (upsert dedup logic, neighborhood traversal) and ResolutionService (exact/alias/substring matching, similarity threshold behavior) are the highest-value tests, since these are the two places correctness bugs would silently produce duplicate or missing graph edges. Integration test: ingest the FinEdge and Lexora sample documents, then assert the query pipeline surfaces the cross-project INFLUENCED_BY-style relationship between them — this was manually verified working end-to-end during development, confirming the core "strong answer" scenario the assignment describes is achievable with this architecture.
+Testing approach: unit tests on `RelationshipsService` (upsert dedup logic, neighborhood traversal) and `ResolutionService` (exact/alias/substring matching, similarity threshold behavior) are the highest-value tests, since these are the two places correctness bugs would silently produce duplicate or missing graph edges. Integration test: ingest the FinEdge and Lexora sample documents, then assert the query pipeline surfaces the cross-project relationship between them.
+
+Beyond automated tests, this system was manually verified twice against realistic scenarios: once using the original sample data (FinEdge → Lexora), and once using freshly-authored content ingested live via the Notion integration (a hypothetical GreenGrid project explicitly reusing lessons from both Lexora and FinEdge) — the second test is stronger evidence of correctness, since that content and its entity mentions didn't exist anywhere in the original seed data, and the system still resolved entities correctly and traced the full multi-project decision chain with proposer, participants, and reasoning.

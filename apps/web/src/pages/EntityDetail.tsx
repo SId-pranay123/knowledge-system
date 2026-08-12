@@ -1,6 +1,24 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 
+// Explicit plural<->singular maps — NOT naive string concatenation/regex.
+// "person" is an irregular plural ("people", not "persons"), which silently
+// broke both relationship lookups and connected-entity label resolution
+// when handled with `type + 's'` or `.replace(/s$/, '')`.
+const PLURAL_TO_SINGULAR: Record<string, string> = {
+  people: 'person',
+  clients: 'client',
+  projects: 'project',
+  decisions: 'decision',
+  topics: 'topic',
+};
+const SINGULAR_TO_PLURAL: Record<string, string> = {
+  person: 'people',
+  client: 'clients',
+  project: 'projects',
+  decision: 'decisions',
+  topic: 'topics',
+};
 const ENDPOINT_FOR: Record<string, string> = {
   people: '/people',
   clients: '/clients',
@@ -30,7 +48,7 @@ export default function EntityDetail({
   const [otherLabels, setOtherLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
-  const singular = entityType.replace(/s$/, '');
+  const singular = PLURAL_TO_SINGULAR[entityType] ?? entityType;
 
   useEffect(() => {
     setLoading(true);
@@ -54,7 +72,8 @@ export default function EntityDetail({
             const key = `${otherType}:${otherId}`;
             if (labels[key]) return;
             try {
-              const other = await api.get(`${ENDPOINT_FOR[`${otherType}s`]}/${otherId}`);
+              const pluralType = SINGULAR_TO_PLURAL[otherType] ?? `${otherType}s`;
+              const other = await api.get(`${ENDPOINT_FOR[pluralType]}/${otherId}`);
               labels[key] = other.title ?? other.name ?? otherId;
             } catch {
               labels[key] = otherId;
@@ -73,7 +92,7 @@ export default function EntityDetail({
 
   return (
     <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <button onClick={onBack} className="ghost-button" style={{ marginBottom: 16 }}>← Back</button>
+      <button onClick={onBack} style={{ marginBottom: 16 }}>← Back</button>
       <h1>{label}</h1>
       {entity.description && <p style={{ color: '#444' }}>{entity.description}</p>}
       {entity.reasoning && (
@@ -97,7 +116,7 @@ export default function EntityDetail({
           return (
             <li
               key={r.id}
-              onClick={() => onSelect(`${otherType}s`, otherId)}
+              onClick={() => onSelect(SINGULAR_TO_PLURAL[otherType] ?? `${otherType}s`, otherId)}
               style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}
             >
               <span style={{ color: '#888' }}>{r.relationshipType}</span> {arrow}{' '}

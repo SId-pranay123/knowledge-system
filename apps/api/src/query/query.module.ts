@@ -10,5 +10,6 @@ import { IngestionModule } from '../ingestion/ingestion.module';
   imports: [EmbeddingsModule, RelationshipsModule, IngestionModule],
   controllers: [QueryController],
   providers: [QueryService, QueryAnalyzerService],
+  exports: [QueryService],
 })
 export class QueryModule {}

@@ -1,18 +1,22 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import Dashboard from './pages/Dashboard';
 import Explorer from './pages/Explorer';
 import EntityDetail from './pages/EntityDetail';
 import GraphView from './pages/GraphView';
+import GlobalGraph from './pages/GlobalGraph';
 import { setToken } from './api/client';
+import AskAI from './pages/AskAi';
 
 type Route =
   | { page: 'dashboard' }
   | { page: 'explorer' }
   | { page: 'detail'; entityType: string; entityId: string }
   | { page: 'graph'; entityType: string; entityId: string }
+  | { page: 'fullGraph' }
   | { page: 'ask' };
 
-// Simple state-based routing — 5 pages total, a full router library would be
+// Simple state-based routing — 6 pages total, a full router library would be
 // overkill for this scope. Each page navigates by calling setRoute.
 export default function App() {
   const [route, setRoute] = useState<Route>({ page: 'dashboard' });
@@ -55,6 +59,7 @@ export default function App() {
     toExplorer: () => setRoute({ page: 'explorer' }),
     toDetail: (entityType: string, entityId: string) => setRoute({ page: 'detail', entityType, entityId }),
     toGraph: (entityType: string, entityId: string) => setRoute({ page: 'graph', entityType, entityId }),
+    toFullGraph: () => setRoute({ page: 'fullGraph' }),
     toAsk: () => setRoute({ page: 'ask' }),
   };
 
@@ -72,6 +77,12 @@ export default function App() {
           className={`nav-link ${route.page === 'explorer' ? 'active' : ''}`}
         >
           Explorer
+        </a>
+        <a
+          onClick={nav.toFullGraph}
+          className={`nav-link ${route.page === 'fullGraph' ? 'active' : ''}`}
+        >
+          Full Graph
         </a>
         <a
           onClick={nav.toAsk}
@@ -123,21 +134,9 @@ export default function App() {
         </>
       )}
 
-      {route.page === 'ask' && (
-        <div style={{ maxWidth: 640, margin: '40px auto', fontFamily: 'sans-serif' }}>
-          <h1>Ask the knowledge base</h1>
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="What did we learn from FinEdge that is useful for Lexora?"
-            style={{ width: '100%', height: 80 }}
-          />
-          <button className="primary-button" onClick={ask} disabled={asking} style={{ marginTop: 12 }}>
-            {asking ? 'Asking...' : 'Ask'}
-          </button>
-          {answer && <div style={{ marginTop: 20, whiteSpace: 'pre-wrap' }}>{answer}</div>}
-        </div>
-      )}
+      {route.page === 'fullGraph' && <GlobalGraph onSelect={nav.toDetail} />}
+
+      {route.page === 'ask' && <AskAI />}
     </div>
   );
 }

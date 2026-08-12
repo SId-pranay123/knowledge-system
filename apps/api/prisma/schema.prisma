@@ -53,7 +53,7 @@ model Project {
 model Document {
   id          String   @id @default(uuid())
   title       String
-  sourceType  String   // LOCAL | GOOGLE_DOC | SLACK | MANUAL
+  sourceType  String   // LOCAL | GOOGLE_DOC | SLACK | MANUAL | NOTION
   sourceUrl   String?
   content     String
   contentHash String   @unique // used for delta detection on re-ingestion
@@ -65,13 +65,13 @@ model Document {
 }
 
 model Chunk {
-  id             String                       @id @default(uuid())
-  documentId     String
-  document       Document                     @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  content        String
-  chunkIndex     Int
-  embedding      Unsupported("vector(3072)")?
-  createdAt      DateTime                     @default(now())
+  id         String                       @id @default(uuid())
+  documentId String
+  document   Document                     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    String
+  chunkIndex Int
+  embedding  Unsupported("vector(3072)")?
+  createdAt  DateTime                     @default(now())
 
   @@map("chunks")
 }
@@ -102,6 +102,34 @@ model Topic {
   @@map("topics")
 }
 
+// ---------- Chat history ----------
+// A Conversation is one chat session (like a ChatGPT/Claude thread).
+// Each Message is one question+answer pair within it.
+
+model Conversation {
+  id        String    @id @default(uuid())
+  title     String    // first question, truncated, shown in the sidebar
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  question       String
+  answer         String
+  entities       Json?        // resolved entities from the query pipeline, for display
+  relationships  Json?
+  sources        Json?
+  createdAt      DateTime     @default(now())
+
+  @@map("messages")
+}
+
 // ---------- The graph ----------
 // Polymorphic edges: (sourceType, sourceId) --relationshipType--> (targetType, targetId)
 // This table is the knowledge graph. Traversal = SQL queries against it.
@@ -110,10 +138,10 @@ model Relationship {
   id               String   @id @default(uuid())
   sourceType       String   // 'person' | 'project' | 'client' | 'document' | 'decision' | 'topic'
   sourceId         String
-  relationshipType String   // 'WORKED_ON' | 'HAS_DECISION' | 'MADE_BY' | 'SUPERSEDES' | 'INFLUENCED_BY' | 'ABOUT' | 'DISCUSSED_IN' | ...
+  relationshipType String   // 'WORKED_ON' | 'HAS_DECISION' | 'MADE_BY' | 'SUPERSEDES' | 'INFLUENCED_BY' | 'ABOUT' | 'DISCUSSED_IN' | 'LEADS' | 'PARTICIPANT' | ...
   targetType       String
   targetId         String
-  metadata         Json?    // { confidence, sourceChunkId, extractedAt, mentionCount }
+  metadata         Json?    // { confidence, sourceChunkId, extractedAt, mentionCount, source: 'structured-seed' }
   createdAt        DateTime @default(now())
 
   @@index([sourceType, sourceId])

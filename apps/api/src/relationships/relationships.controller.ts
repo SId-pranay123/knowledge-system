@@ -10,6 +10,11 @@ export class RelationshipsController {
   @UseGuards(JwtAuthGuard)
   @Post() create(@Body() dto: CreateRelationshipDto) { return this.service.create(dto); }
 
+  @Get()
+  findAll() {
+    return this.service.findAll();
+  }
+
   @Get(':entityType/:entityId')
   findForEntity(@Param('entityType') entityType: EntityType, @Param('entityId') entityId: string) {
     return this.service.findForEntity(entityType, entityId);

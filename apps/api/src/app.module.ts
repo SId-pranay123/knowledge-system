@@ -13,6 +13,7 @@ import { EmbeddingsModule } from './embeddings/embeddings.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { NotionModule } from './notion/notion.module';
 import { QueryModule } from './query/query.module';
+import { ConversationsModule } from './conversations/conversations.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { QueryModule } from './query/query.module';
     IngestionModule,
     NotionModule,
     QueryModule,
+    ConversationsModule,
   ],
 })
 export class AppModule {}

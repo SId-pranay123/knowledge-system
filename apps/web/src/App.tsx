@@ -7,6 +7,7 @@ import GraphView from './pages/GraphView';
 import GlobalGraph from './pages/GlobalGraph';
 import { setToken } from './api/client';
 import AskAI from './pages/AskAi';
+import Sources from './pages/Sources';
 
 type Route =
   | { page: 'dashboard' }
@@ -14,6 +15,7 @@ type Route =
   | { page: 'detail'; entityType: string; entityId: string }
   | { page: 'graph'; entityType: string; entityId: string }
   | { page: 'fullGraph' }
+  | { page: 'sources' }
   | { page: 'ask' };
 
 // Simple state-based routing — 6 pages total, a full router library would be
@@ -60,6 +62,7 @@ export default function App() {
     toDetail: (entityType: string, entityId: string) => setRoute({ page: 'detail', entityType, entityId }),
     toGraph: (entityType: string, entityId: string) => setRoute({ page: 'graph', entityType, entityId }),
     toFullGraph: () => setRoute({ page: 'fullGraph' }),
+    toSources: () => setRoute({ page: 'sources' }),
     toAsk: () => setRoute({ page: 'ask' }),
   };
 
@@ -83,6 +86,12 @@ export default function App() {
           className={`nav-link ${route.page === 'fullGraph' ? 'active' : ''}`}
         >
           Full Graph
+        </a>
+        <a
+          onClick={nav.toSources}
+          className={`nav-link ${route.page === 'sources' ? 'active' : ''}`}
+        >
+          Sources
         </a>
         <a
           onClick={nav.toAsk}
@@ -135,6 +144,8 @@ export default function App() {
       )}
 
       {route.page === 'fullGraph' && <GlobalGraph onSelect={nav.toDetail} />}
+
+      {route.page === 'sources' && <Sources />}
 
       {route.page === 'ask' && <AskAI />}
     </div>

@@ -21,27 +21,43 @@ export class ExtractionService {
         'GEMINI_API_KEY is not set. Check that apps/api/.env exists and contains it (root .env is NOT read by the API process).',
       );
     } else {
-      this.logger.log(`GEMINI_API_KEY loaded (starts with "${process.env.GEMINI_API_KEY.slice(0, 6)}...", length ${process.env.GEMINI_API_KEY.length})`);
+      this.logger.log(
+        `GEMINI_API_KEY loaded (starts with "${process.env.GEMINI_API_KEY.slice(0, 6)}...", length ${process.env.GEMINI_API_KEY.length})`,
+      );
     }
   }
 
-  async extract(documentText: string, sourceLabel: string): Promise<ExtractionResult> {
+  // knownEntityNames grounds extraction against already-existing graph nodes,
+  // so the LLM reuses canonical names ("Internal Knowledge Base (v1)")
+  // instead of inventing abbreviations/variants ("Internal KB") that
+  // downstream resolution then has to guess how to merge. This is the fix
+  // upstream of ResolutionService's fuzzy matching, not a replacement for it —
+  // resolution still needs to exist for genuinely new documents with no
+  // grounding context yet.
+  async extract(documentText: string, sourceLabel: string, knownEntityNames: string[] = []): Promise<ExtractionResult> {
+    const groundingBlock = knownEntityNames.length
+      ? `\nKnown existing entities already in our system (people, projects, clients, decisions, topics):\n${knownEntityNames.join(', ')}\n\nIf a mention in the document refers to one of these, use the EXACT name above in your output — do not invent an abbreviation, nickname, or shortened variant of an existing entity.\n`
+      : '';
+
     const prompt = `You are extracting structured knowledge from an internal company document.
 Source: ${sourceLabel}
-
+${groundingBlock}
 Extract:
 1. Entities mentioned: people, clients, projects, decisions, topics.
 2. Relationships between them (e.g. WORKED_ON, HAS_DECISION, MADE_BY, INFLUENCED_BY, ABOUT, DISCUSSED_IN, SUPERSEDES).
    For each relationship include a short "context" snippet (<20 words) supporting it.
 
-Only extract what is explicitly stated or clearly implied. Do not invent entities.
+Only extract entities and relationships explicitly stated or clearly implied in the document text.
+Do not create an entity for the document itself, its title, or its author's opinions/vision as a
+standalone "project" or "topic" — only extract the real people/projects/clients/decisions/topics
+the document discusses.
 
 Document:
 """
 ${documentText}
 """`;
 
-    this.logger.log(`Extracting from "${sourceLabel}" (${documentText.length} chars)...`);
+    this.logger.log(`Extracting from "${sourceLabel}" (${documentText.length} chars, ${knownEntityNames.length} known entities for grounding)...`);
     try {
       // Explicit timeout: on free-tier quota or network issues, a hung request
       // otherwise blocks the whole ingestion/seed run indefinitely with no error.

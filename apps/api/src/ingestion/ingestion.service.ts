@@ -26,6 +26,37 @@ export class IngestionService {
     return crypto.createHash('sha256').update(content).digest('hex');
   }
 
+  // Used by source integrations (Notion, and any future one) to show which
+  // of their accessible items are already in the graph, so the person
+  // browsing a source's page list isn't guessing what's already ingested.
+  async getIngestedSourceUrls(sourceType: string): Promise<string[]> {
+    const docs = await this.prisma.document.findMany({
+      where: { sourceType },
+      select: { sourceUrl: true },
+    });
+    return docs.map((d) => d.sourceUrl).filter((u): u is string => !!u);
+  }
+
+  // Pulls the current name/title of every existing entity, used to ground
+  // the extraction LLM so it reuses canonical names instead of inventing
+  // abbreviations that then create duplicate graph nodes.
+  private async getKnownEntityNames(): Promise<string[]> {
+    const [people, clients, projects, decisions, topics] = await Promise.all([
+      this.prisma.person.findMany({ select: { name: true } }),
+      this.prisma.client.findMany({ select: { name: true } }),
+      this.prisma.project.findMany({ select: { name: true } }),
+      this.prisma.decision.findMany({ select: { title: true } }),
+      this.prisma.topic.findMany({ select: { name: true } }),
+    ]);
+    return [
+      ...people.map((p) => p.name),
+      ...clients.map((c) => c.name),
+      ...projects.map((p) => p.name),
+      ...decisions.map((d) => d.title),
+      ...topics.map((t) => t.name),
+    ];
+  }
+
   async ingestDocument(params: { title: string; content: string; sourceType: string; sourceUrl?: string }) {
     const contentHash = this.hash(params.content);
 
@@ -38,7 +69,8 @@ export class IngestionService {
     // Run extraction BEFORE creating the document row. If this throws (rate
     // limit, network, bad key), nothing is persisted, so a retry correctly
     // reprocesses this document instead of silently skipping it forever.
-    const extraction = await this.extraction.extract(params.content, params.title);
+    const knownEntityNames = await this.getKnownEntityNames();
+    const extraction = await this.extraction.extract(params.content, params.title, knownEntityNames);
 
     const document = await this.prisma.document.create({
       data: {

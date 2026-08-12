@@ -75,6 +75,58 @@ export class NotionService {
     return titleProp ? this.richTextToPlain(titleProp.title) : `Notion Page ${pageId}`;
   }
 
+  // Lists every page the integration currently has access to (i.e. every
+  // page someone has shared with it via the page's "Connections" menu in
+  // Notion). This is what lets the UI show a pick-and-ingest list instead of
+  // requiring a manually copy-pasted page ID — the integration's access
+  // *is* the source of truth for what's ingestable.
+  async listAccessiblePages() {
+    if (!this.apiKey) {
+      throw new BadRequestException('Notion integration is not configured (missing NOTION_API_KEY).');
+    }
+
+    const results: { id: string; title: string; lastEditedTime: string; url: string }[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const res = await fetch(`${this.baseUrl}/search`, {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({
+          filter: { property: 'object', value: 'page' },
+          page_size: 100,
+          ...(cursor ? { start_cursor: cursor } : {}),
+        }),
+      });
+      if (!res.ok) throw new BadRequestException(`Notion API error: ${res.status} ${await res.text()}`);
+      const data = await res.json();
+
+      for (const page of data.results ?? []) {
+        const titleProp = Object.values(page.properties ?? {}).find((p: any) => p.type === 'title') as any;
+        results.push({
+          id: page.id,
+          title: titleProp ? this.richTextToPlain(titleProp.title) || '(untitled)' : '(untitled)',
+          lastEditedTime: page.last_edited_time,
+          url: page.url,
+        });
+      }
+      cursor = data.has_more ? data.next_cursor : undefined;
+    } while (cursor);
+
+    return results;
+  }
+
+  // Same as listAccessiblePages, but cross-referenced against already-
+  // ingested documents (matched by sourceUrl) so the UI can show which pages
+  // are new vs already in the graph, instead of the person having to guess
+  // or re-ingest blindly.
+  async listAccessiblePagesWithStatus() {
+    const pages = await this.listAccessiblePages();
+    const existing = await this.ingestion.getIngestedSourceUrls('NOTION');
+    const existingSet = new Set(existing);
+    return pages.map((p) => ({ ...p, alreadyIngested: existingSet.has(`https://notion.so/${p.id.replace(/-/g, '')}`) }));
+  }
+
   async ingestPage(pageId: string) {
     if (!this.apiKey) {
       throw new BadRequestException('Notion integration is not configured (missing NOTION_API_KEY).');

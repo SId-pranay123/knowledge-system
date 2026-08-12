@@ -31,7 +31,7 @@ Sources: sample JSON/markdown/Slack-export files (static, as provided) + one rea
 A graph-native database earns its cost at high traversal depth or edge volume. At 8–15 people and a few hundred to a few thousand documents, a `relationships` table with indexed `(source_type, source_id)` / `(target_type, target_id)` columns gives 1–2 hop traversal via plain SQL joins/recursive CTEs, fast enough at this scale. Running Neo4j alongside Postgres adds a second database to operate, migrate, and explain, for a graph-depth benefit this dataset doesn't need.
 
 ### Why not full-corpus GraphRAG (Leiden clustering)
-Microsoft's GraphRAG builds community summaries via Leiden clustering over the whole corpus. Adding one new document can shift community structure, forcing a full-graph recompute — the opposite of "keep the knowledge useful when new information is added." This design has no clustering step: new documents are hashed, and only new/changed content is extracted and upserted into the existing graph. No rebuild, ever.
+Microsoft's GraphRAG builds community summaries via Leiden clustering over the whole corpus. Adding one new document can shift community structure, forcing a full-graph recompute — the opposite of "keep the knowledge useful when new information is added." This design has no clustering step: new documents are hashed, and only new/changed content is extracted and upserted into the existing graph. **No document ever triggers a rebuild of anything — ingesting document #500 does the same fixed amount of work as ingesting document #1, regardless of how large the existing graph already is.**
 
 ## 3. Data model
 
@@ -75,6 +75,8 @@ Document arrives (sample file, Slack export, or Notion page via the Sources UI)
       → chunk document → embed each chunk → store in pgvector
 ```
 
+**This is an incremental-update pipeline, not a rebuild-on-write one.** A new document only ever adds to the existing graph — it never triggers reprocessing of previously-ingested documents, never recomputes existing relationships, and never touches the structure of anything already stored. The only "update" that happens to existing data is a `mentionCount` increment on an edge that gets independently re-confirmed by a new document. This directly satisfies the assignment's explicit requirement to "keep the knowledge useful when new information is added" without reprocessing everything.
+
 Structured sample data (`people.json`, `clients.json`, `projects.json`, `decisions.json`, `topics.json`) already contains explicit relationships — inserted directly as graph edges during seeding, bypassing LLM extraction entirely. LLM extraction is reserved for unstructured sources where relationships only exist in prose.
 
 ### Entity resolution — six-step matching
@@ -87,6 +89,8 @@ The same real-world entity gets mentioned inconsistently across documents and vi
 4. **Acronym match** — catches abbreviations like "Internal KB" vs "Internal Knowledge Base"
 5. **Token-overlap (Dice coefficient)** — catches shared-word-prefix variants with different suffixes
 6. **Embedding similarity** — last-resort semantic match
+
+Steps 1–5 are all lexical/keyword-level techniques (exact strings, substrings, character-initial matching, word-overlap) — they involve no semantic understanding and are cheap to compute. Step 6 is the only semantic step in resolution, used only when nothing lexical matched.
 
 This logic (`ResolutionService.findBestMatch`) is shared between `resolveOrCreate` (ingestion — creates a new node if nothing matches) and `findMatch` (query answering — returns null if nothing matches, since a user's question should never create a graph node). An earlier version had the query pipeline doing its own weaker exact-match-only lookup, which caused a real bug (see §5).
 
@@ -108,7 +112,15 @@ Question
   → LLM synthesizes answer (explicitly instructed to be exhaustive), citing sources
 ```
 
-**Bug found and fixed:** the query pipeline originally had its own, weaker, exact-match-only entity resolution instead of reusing `ResolutionService`. A question saying "Lexora" never matched "Lexora Knowledge Core," so graph traversal silently returned nothing, and the system fell back to an incomplete answer despite the underlying graph data being fully correct. Fixed by extracting shared matching logic and having `QueryService` call `ResolutionService.findMatch`. A second issue — raw UUIDs in the synthesis context instead of resolved names — was fixed at the same time.
+**Three distinct retrieval paradigms run together in every query, not as sequential fallbacks:**
+
+1. **Lexical/keyword matching** — the same exact/substring/acronym/token-overlap layers from `ResolutionService` (§4), used here to resolve entity names mentioned in the question against existing graph nodes.
+2. **Semantic vector search** — pgvector cosine similarity over document chunks, finding narrative text meaningfully related to the question regardless of exact wording.
+3. **Graph traversal** — 1–2 hop walks over the `relationships` table from every resolved entity, surfacing structured facts (who, what decision, made by whom, when) that neither keyword matching nor vector search can represent on their own.
+
+All three run in the same `ask()` call and their outputs are combined into one context before synthesis — the graph traversal supplies the structured facts, the vector search supplies supporting narrative/reasoning text the graph doesn't capture, and lexical matching is what makes the entity resolution step (which everything downstream depends on) reliable in the first place. Removing any one of them changes what kind of system this is, not just how well it performs — see the bug below for a concrete demonstration of what happens when graph traversal is effectively absent.
+
+**Bug found and fixed:** the query pipeline originally had its own, weaker, exact-match-only entity resolution instead of reusing `ResolutionService`. A question saying "Lexora" never matched "Lexora Knowledge Core," so graph traversal silently returned nothing, and the system fell back to an incomplete answer built from vector search alone despite the underlying graph data being fully correct — a live demonstration of the assignment's own "weak answer" pattern, produced by this system's own real bug rather than a hypothetical. Fixed by extracting shared matching logic and having `QueryService` call `ResolutionService.findMatch`. A second issue — raw UUIDs in the synthesis context instead of resolved names — was fixed at the same time.
 
 **Second bug found and fixed (test cleanup, not app logic):** the integration test's cleanup step originally deleted `relationships` and `chunks` with no filter — wiping the *entire* tables on every test run, including real seeded sample data. This silently destroyed the live app's graph traversal and vector search until the next full reseed, and was only caught because a live query in the running app returned empty `relationships`/`sources` right after running the integration test. This is why the integration test was subsequently rewritten to use a fully in-memory fake database (see §11) rather than a real one at all — scoping deletions correctly is a fragile fix; making the test structurally incapable of touching real data is the actual fix.
 

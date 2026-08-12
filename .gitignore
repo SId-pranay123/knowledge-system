@@ -3,3 +3,14 @@ dist
 .env
 *.log
 apps/api/generated
+.DS_Store
+
+# Secrets — never commit
+.env.*
+!.env.example
+*.key.json
+vertex-key.json
+service-account*.json
+client_secret_*.json
+google-oauth-token.json
+*.pem

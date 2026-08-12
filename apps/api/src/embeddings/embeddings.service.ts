@@ -1,19 +1,23 @@
-import { Injectable } from '@nestjs/common';
-import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
+import { Injectable, Inject } from '@nestjs/common';
+import type { Embeddings } from '@langchain/core/embeddings';
+import { EMBEDDINGS_MODEL } from '../llm/llm.tokens';
 
-// Thin wrapper around Gemini embeddings. Kept behind an interface so swapping
-// providers later (e.g. to OpenAI) only touches this one file.
+// Thin wrapper around whichever embeddings provider LlmModule constructed
+// (direct Gemini API or Vertex AI) — this service and everything that calls
+// it never knows which one is active; it depends only on LangChain's
+// abstract Embeddings type, injected via the EMBEDDINGS_MODEL token.
 //
-// NOTE: gemini-embedding-001 outputs 3072-dim vectors by default. The
-// chunks.embedding column in schema.prisma is vector(3072) to match — if you
-// ever change this model, update both places together (see also
-// resolution.service.ts, which relies on the same dimensionality implicitly).
+// NOTE on dimensionality: gemini-embedding-001 outputs 3072-dim vectors by
+// default on the direct API. If Vertex AI's version of this model (or
+// whatever embeddings model ends up configured there) outputs a different
+// dimension, the chunks.embedding column (vector(3072) in schema.prisma)
+// and any inserts will fail with a dimension-mismatch error — the same
+// class of issue hit earlier when the model was first changed. If switching
+// to Vertex embeddings, verify the output dimension before assuming it's
+// still 3072.
 @Injectable()
 export class EmbeddingsService {
-  private embedder = new GoogleGenerativeAIEmbeddings({
-    apiKey: process.env.GEMINI_API_KEY,
-    model: 'gemini-embedding-001',
-  });
+  constructor(@Inject(EMBEDDINGS_MODEL) private embedder: Embeddings) {}
 
   async embed(text: string): Promise<number[]> {
     return this.embedder.embedQuery(text);

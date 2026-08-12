@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { Injectable, Inject } from '@nestjs/common';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { RelationshipsService } from '../relationships/relationships.service';
 import { ResolutionService } from '../ingestion/resolution.service';
 import { QueryAnalyzerService } from './query-analyzer.service';
+import { CHAT_MODEL_MAIN } from '../llm/llm.tokens';
 import { EntityType, ENTITY_TYPES } from '../relationships/relationships.dto';
 
 // The hybrid retrieval pipeline. This is what turns "keyword search" into
@@ -12,15 +13,14 @@ import { EntityType, ENTITY_TYPES } from '../relationships/relationships.dto';
 //
 // Steps: analyze question -> resolve mentioned entities -> traverse graph
 // (1-2 hops) -> vector search over chunks -> synthesize with citations.
+//
+// llm is now injected (CHAT_MODEL_MAIN token) instead of constructed inline
+// — this also means it's swappable in tests via .overrideProvider(), which
+// the earlier version of this file could not support.
 @Injectable()
 export class QueryService {
-  private llm = new ChatGoogleGenerativeAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    model: 'gemini-3.6-flash',
-    temperature: 0.2,
-  });
-
   constructor(
+    @Inject(CHAT_MODEL_MAIN) private llm: BaseChatModel,
     private prisma: PrismaService,
     private embeddings: EmbeddingsService,
     private relationships: RelationshipsService,
@@ -29,16 +29,12 @@ export class QueryService {
   ) {}
 
   // Documents are excluded here deliberately: they're not named entities a
-  // user would reference by title in a question — a document row is not
-  // something a question names, unlike a person/project/decision/topic.
+  // user would reference by title in a question.
   private readonly RESOLVABLE_TYPES: EntityType[] = ENTITY_TYPES.filter((t) => t !== 'document');
 
   // Uses the SAME matching logic as ingestion (ResolutionService.findMatch —
   // exact/alias/substring/acronym/dice/embedding), not a separate weaker
-  // exact-match-only check. A question saying "Lexora" must resolve to the
-  // graph node named "Lexora Knowledge Core" the same way ingestion would —
-  // otherwise resolution silently fails, traversal never runs, and the
-  // system falls back to vector search alone (the "weak answer" pattern).
+  // exact-match-only check.
   private async resolveEntityByName(name: string): Promise<{ type: EntityType; id: string } | null> {
     for (const type of this.RESOLVABLE_TYPES) {
       const id = await this.resolution.findMatch(type, name);
@@ -58,7 +54,7 @@ export class QueryService {
     const { entities: entityNames } = await this.analyzer.analyze(question);
 
     // 2. Resolve mentioned entity names to graph nodes
-    const resolved = (await Promise.all(entityNames.map((n) => this.resolveEntityByName(n)))).filter(Boolean) as { type: EntityType; id: string }[];
+    const resolved = (await Promise.all(entityNames.map((n:any) => this.resolveEntityByName(n)))).filter(Boolean) as { type: EntityType; id: string }[];
 
     // 3. Graph traversal — pull the connected neighborhood, not just the entity itself
     const graphFacts: any[] = [];
@@ -67,7 +63,7 @@ export class QueryService {
       graphFacts.push(...edges);
     }
 
-    // 4. Vector search over chunks, boosted toward resolved entities' source docs
+    // 4. Vector search over chunks
     const queryVector = await this.embeddings.embed(question);
     const chunkRows: any[] = await this.prisma.$queryRawUnsafe(
       `SELECT c.content, c."documentId", d.title, 1 - (c.embedding <=> $1::vector) as similarity
@@ -77,8 +73,7 @@ export class QueryService {
       `[${queryVector.join(',')}]`,
     );
 
-    // 5. Build context with human-readable labels (not raw UUIDs — the LLM
-    // can't write a coherent answer from IDs alone) and synthesize
+    // 5. Build context with human-readable labels and synthesize
     const graphContext = graphFacts.length
       ? (
           await Promise.all(

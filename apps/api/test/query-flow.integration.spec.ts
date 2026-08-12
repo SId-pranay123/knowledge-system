@@ -106,11 +106,31 @@ describe('Ingestion -> Query integration: cross-project relationship (mocked LLM
   });
 
   afterAll(async () => {
-    // Clean up everything this test created so re-runs stay idempotent.
-    await prisma.relationship.deleteMany({});
-    await prisma.project.deleteMany({ where: { name: { in: [PROJECT_A, PROJECT_B] } } });
-    await prisma.chunk.deleteMany({});
-    await prisma.document.deleteMany({ where: { title: { in: ['ZZTest Doc A', 'ZZTest Doc B'] } } });
+    // Clean up ONLY what this test created. Both the relationship and chunk
+    // deletions below are scoped — deleting either unconditionally (as an
+    // earlier version of this test did) wipes the ENTIRE table, including
+    // real seeded sample data, silently breaking graph traversal and vector
+    // search app-wide until the next full reseed. This was a real bug,
+    // found by seeing empty relationships/sources in a live query after
+    // running this test.
+    const testProjects = await prisma.project.findMany({
+      where: { name: { in: [PROJECT_A, PROJECT_B] } },
+      select: { id: true },
+    });
+    const testProjectIds = testProjects.map((p) => p.id);
+
+    const testDocs = await prisma.document.findMany({
+      where: { title: { in: ['ZZTest Doc A', 'ZZTest Doc B'] } },
+      select: { id: true },
+    });
+    const testDocIds = testDocs.map((d) => d.id);
+
+    await prisma.relationship.deleteMany({
+      where: { OR: [{ sourceId: { in: testProjectIds } }, { targetId: { in: testProjectIds } }] },
+    });
+    await prisma.project.deleteMany({ where: { id: { in: testProjectIds } } });
+    await prisma.chunk.deleteMany({ where: { documentId: { in: testDocIds } } });
+    await prisma.document.deleteMany({ where: { id: { in: testDocIds } } });
     await app.close();
   });
 

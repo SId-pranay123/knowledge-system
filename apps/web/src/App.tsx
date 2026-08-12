@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import Dashboard from './pages/Dashboard';
 import Explorer from './pages/Explorer';
 import EntityDetail from './pages/EntityDetail';
@@ -18,16 +17,11 @@ type Route =
   | { page: 'ask' }
   | { page: 'sources' };
 
-// Simple state-based routing — 6 pages total, a full router library would be
-// overkill for this scope. Each page navigates by calling setRoute.
 export default function App() {
   const [route, setRoute] = useState<Route>({ page: 'dashboard' });
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState<string | null>(null);
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
-  const [asking, setAsking] = useState(false);
 
   async function login() {
     const res = await fetch('/api/auth/login', {
@@ -36,24 +30,12 @@ export default function App() {
       body: JSON.stringify({ username: loginUser, password: loginPass }),
     });
     if (res.ok) {
-      const { accessToken } = await res.json();
-      setToken(accessToken);
+      const data = await res.json();
+      setToken(data.accessToken);
       setLoggedIn(true);
     } else {
       alert('Login failed');
     }
-  }
-
-  async function ask() {
-    setAsking(true);
-    const res = await fetch('/api/query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
-    });
-    const data = await res.json();
-    setAnswer(data.answer);
-    setAsking(false);
   }
 
   const nav = {
@@ -63,49 +45,57 @@ export default function App() {
     toGraph: (entityType: string, entityId: string) => setRoute({ page: 'graph', entityType, entityId }),
     toFullGraph: () => setRoute({ page: 'fullGraph' }),
     toAsk: () => setRoute({ page: 'ask' }),
+    toSources: () => setRoute({ page: 'sources' }),
   };
 
   return (
     <div className="app-shell">
       <nav className="top-nav">
-        <a
-          onClick={nav.toDashboard}
-          className={`nav-link ${route.page === 'dashboard' ? 'active' : ''}`}
-        >
+        <a onClick={nav.toDashboard} className={'nav-link ' + (route.page === 'dashboard' ? 'active' : '')}>
           Dashboard
         </a>
-        <a
-          onClick={nav.toExplorer}
-          className={`nav-link ${route.page === 'explorer' ? 'active' : ''}`}
-        >
+        <a onClick={nav.toExplorer} className={'nav-link ' + (route.page === 'explorer' ? 'active' : '')}>
           Explorer
         </a>
-        <a
-          onClick={nav.toFullGraph}
-          className={`nav-link ${route.page === 'fullGraph' ? 'active' : ''}`}
-        >
+        <a onClick={nav.toFullGraph} className={'nav-link ' + (route.page === 'fullGraph' ? 'active' : '')}>
           Full Graph
         </a>
-        <a
-          onClick={nav.toAsk}
-          className={`nav-link ${route.page === 'ask' ? 'active' : ''}`}
-        >
+        <a onClick={nav.toAsk} className={'nav-link ' + (route.page === 'ask' ? 'active' : '')}>
           Ask AI
         </a>
+        <a onClick={nav.toSources} className={'nav-link ' + (route.page === 'sources' ? 'active' : '')}>
+          Sources
+        </a>
+
         <div className="nav-spacer">
           {loggedIn ? (
             <span className="login-status">Logged in</span>
           ) : (
             <span className="login-controls">
-              <input className="input-field login-input" placeholder="user" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
-              <input className="input-field login-input" placeholder="pass" type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
-              <button className="primary-button" onClick={login}>Login</button>
+              <input
+                className="input-field login-input"
+                placeholder="user"
+                value={loginUser}
+                onChange={(e) => setLoginUser(e.target.value)}
+              />
+              <input
+                className="input-field login-input"
+                placeholder="pass"
+                type="password"
+                value={loginPass}
+                onChange={(e) => setLoginPass(e.target.value)}
+              />
+              <button className="primary-button" onClick={login}>
+                Login
+              </button>
             </span>
           )}
         </div>
       </nav>
 
-      {route.page === 'dashboard' && <Dashboard onNavigate={(p) => (p === 'ask' ? nav.toAsk() : nav.toExplorer())} />}
+      {route.page === 'dashboard' && (
+        <Dashboard onNavigate={(p) => (p === 'ask' ? nav.toAsk() : nav.toExplorer())} />
+      )}
 
       {route.page === 'explorer' && <Explorer onSelect={nav.toDetail} />}
 
@@ -139,6 +129,8 @@ export default function App() {
       {route.page === 'fullGraph' && <GlobalGraph onSelect={nav.toDetail} />}
 
       {route.page === 'ask' && <AskAI />}
+
+      {route.page === 'sources' && <Sources />}
     </div>
   );
 }

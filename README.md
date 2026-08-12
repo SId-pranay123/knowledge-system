@@ -22,7 +22,7 @@ Commands below are shown for both **npm** and **yarn** — use whichever you hav
 | Backend | NestJS (TypeScript) |
 | Database | PostgreSQL + pgvector extension |
 | ORM | Prisma |
-| LLM | Gemini — `gemini-3.6-flash` for extraction/synthesis, `gemini-3.5-flash-lite` for query classification, `gemini-embedding-001` for embeddings — via LangChain JS |
+| LLM | Gemini — direct API or Vertex AI (see below), via LangChain JS |
 | Auth | JWT (NestJS + Passport) |
 | Real integration | Notion API |
 
@@ -33,7 +33,7 @@ Commands below are shown for both **npm** and **yarn** — use whichever you hav
 - Node.js 18+
 - npm or yarn
 - Docker (for Postgres)
-- A Gemini API key — get one free at [aistudio.google.com](https://aistudio.google.com/apikey)
+- A Gemini API key — get one free at [aistudio.google.com](https://aistudio.google.com/apikey) (or a Vertex AI service account key — see "LLM provider" below, though see the known limitation there too)
 
 ## Setup
 
@@ -62,12 +62,37 @@ PORT=3000
 # Optional — only needed to test the Notion integration (see below)
 NOTION_API_KEY=
 
+# Optional — see "LLM provider" section below (Vertex AI has a known blocking issue)
+GOOGLE_APPLICATION_CREDENTIALS=
+GOOGLE_CLOUD_LOCATION=
+
 # Optional — only relevant if using the Google service account key setup
-# (see DESIGN.md §9 for why this isn't the primary integration)
+# for Docs specifically (see DESIGN.md §9 for why this isn't the primary
+# integration)
 GOOGLE_SERVICE_ACCOUNT_KEY_PATH=
 ```
 
-### 3. Start Postgres
+### 3. LLM provider: direct API key vs Vertex AI
+
+This system supports two interchangeable Gemini providers, switched entirely via environment variables — no code changes needed either way.
+
+**Direct API key (default, and currently the only fully working option)** — set `GEMINI_API_KEY`, leave `GOOGLE_APPLICATION_CREDENTIALS` unset. Uses `gemini-3.6-flash` / `gemini-3.5-flash-lite` / `gemini-embedding-001`.
+
+**Vertex AI** — set `GOOGLE_APPLICATION_CREDENTIALS` to the path of a Google Cloud service account JSON key file. When set, it takes priority over `GEMINI_API_KEY` entirely. Uses `gemini-2.5-flash` for both chat roles by default, and `gemini-embedding-001` for embeddings.
+
+```
+GOOGLE_APPLICATION_CREDENTIALS=./path-to-your-service-account-key.json
+GOOGLE_CLOUD_LOCATION=us-central1        # optional, defaults to us-central1
+VERTEX_HEAVY_MODEL=gemini-2.5-flash      # optional override
+VERTEX_LITE_MODEL=gemini-2.5-flash       # optional override
+VERTEX_EMBEDDINGS_MODEL=gemini-embedding-001  # optional override
+```
+
+**Known blocking issue:** Vertex AI's chat models (`gemini-2.5-flash`/`gemini-2.5-pro` via `ChatVertexAI`) currently throw `TypeError: Cannot read properties of undefined (reading 'message')` on every call. This is a confirmed, currently-open bug in LangChain JS itself — see [github.com/langchain-ai/langchainjs/issues/8617](https://github.com/langchain-ai/langchainjs/issues/8617), where another developer reports the identical error and stack trace calling the identical models, and confirms upgrading `@langchain/google-vertexai` to its latest version does not fix it. The provider-switching code here is implemented and correctly wired (see `apps/api/src/llm/llm.module.ts`) — this is a third-party library defect, not a bug in this codebase. Use the direct API key until that upstream issue is resolved.
+
+This is implemented in `apps/api/src/llm/llm.module.ts` — the only file that constructs a concrete provider class. Every service that needs a chat model or embeddings (`ExtractionService`, `QueryService`, `QueryAnalyzerService`, `EmbeddingsService`) depends on LangChain's abstract `BaseChatModel`/`Embeddings` types, injected via NestJS DI tokens, and has no knowledge of which provider is actually active.
+
+### 4. Start Postgres
 ```bash
 # npm
 npm run db:up
@@ -77,7 +102,7 @@ yarn db:up
 ```
 Runs a `pgvector/pgvector:pg16` Docker image with the `vector` extension pre-installed.
 
-### 4. Run migrations
+### 5. Run migrations
 ```bash
 # npm
 npm run db:migrate -w apps/api
@@ -87,7 +112,7 @@ yarn workspace api run prisma:migrate
 ```
 Creates all tables: `people`, `clients`, `projects`, `documents`, `chunks`, `decisions`, `topics`, `relationships`, `conversations`, `messages`.
 
-### 5. Seed the database
+### 6. Seed the database
 ```bash
 # npm
 npm run prisma:seed -w apps/api
@@ -103,7 +128,7 @@ This does two things:
 
 **Sample data location**: the seed script expects a `sample-data/` folder at the repo root, containing the structured JSON files, a `documents/` subfolder of markdown files, and a `slack-exports/` subfolder. Set `SAMPLE_DATA_DIR` in `.env` if it's located elsewhere.
 
-### 6. Start the API and frontend
+### 7. Start the API and frontend
 ```bash
 # npm — in two separate terminals
 npm run dev:api
@@ -152,15 +177,17 @@ curl -X POST http://localhost:3000/api/ingest/document \
 
 ## What each part of the system does
 
+**LLM provider abstraction** (`apps/api/src/llm/`): decides once, at startup, whether to use the direct Gemini API or Vertex AI, based on which environment variables are set. Every other service depends on LangChain's abstract chat/embeddings types, not a concrete provider class — see "LLM provider" above.
+
 **Ingestion pipeline** (`apps/api/src/ingestion/`): the core "turn a document into graph data" logic.
 - `ingestion.service.ts` — orchestrates the full flow: hash → delta-check → extract → resolve → persist relationships → chunk → embed
-- `extraction.service.ts` — calls Gemini to pull structured entities/relationships out of raw text, grounded against already-known entity names to reduce duplicate/renamed entities
+- `extraction.service.ts` — calls the injected chat model to pull structured entities/relationships out of raw text, grounded against already-known entity names to reduce duplicate/renamed entities
 - `resolution.service.ts` — decides whether a mentioned entity is one that already exists (via six layered matching strategies: exact match, alias match, substring, acronym, token-overlap, embedding similarity) or genuinely new — shared by both ingestion and query answering
 - `chunking.service.ts` — splits document text into overlapping pieces for embedding/vector search, separate from the whole-document extraction step above
 
 **Query pipeline** (`apps/api/src/query/`): the "answer a question" logic.
 - `query-analyzer.service.ts` — figures out which entities a question is actually about
-- `query.service.ts` — resolves those entities (using the *same* matching logic as ingestion), traverses the graph 1–2 hops from each, searches document chunks by embedding similarity, and asks Gemini to synthesize an answer from both
+- `query.service.ts` — resolves those entities (using the *same* matching logic as ingestion), traverses the graph 1–2 hops from each, searches document chunks by embedding similarity, and asks the injected chat model to synthesize an answer from both
 
 **The graph itself**: one table, `relationships`, with `(sourceType, sourceId) --relationshipType--> (targetType, targetId)` rows. Every entity type (person, project, client, decision, topic) can be a source or target of any relationship — this is what lets the system represent arbitrary connections without a rigid predefined schema.
 
@@ -178,9 +205,9 @@ yarn workspace api test
 yarn workspace api test:integration
 ```
 
-- `test` — fast unit tests (`RelationshipsService`, `ResolutionService`), fully mocked, no external dependencies, no live database or API key needed.
-- `test:integration` — exercises the real ingestion/query pipeline against a real Postgres database. Does **not** make real Gemini API calls: `ExtractionService`, `EmbeddingsService`, and `QueryAnalyzerService` are mocked with fixed, deterministic responses, so the test is fast, free, and not subject to rate limits — while still verifying that extraction output correctly becomes graph edges and that traversal finds them. Requires `yarn db:up`/`npm run db:up` first (a running Postgres instance), but no API key.
+- `test` — fast unit tests (`RelationshipsService`, `ResolutionService`), fully mocked, no external dependencies.
+- `test:integration` — exercises the ingestion → resolution → relationship → query pipeline wiring using a fully in-memory fake database and fixed mock LLM responses. **Does not connect to any real database and does not make any real API call of any kind** — it starts with an empty in-memory store, runs entirely in-process, and discards everything when finished. No Postgres needs to be running, no API key is needed, no `.env` values matter for this command. (An earlier version of this test connected to a real database for its assertions and had a cleanup bug that deleted real seeded data — it was rewritten to be fully self-contained specifically to make that category of incident structurally impossible, not just less likely.)
 
 ## Known limitations
 
-See `DESIGN.md` §7 for the full list. The short version: the global graph view can get visually dense with many entities, there's no caching for repeated identical questions, and two backend modules (`ingestion`, `google-docs`) don't yet follow the same service/repository separation the rest of the codebase uses.
+See `DESIGN.md` §7 for the full list. The short version: Vertex AI's chat models are blocked by a confirmed upstream LangChain JS bug (direct API key works fully), the global graph view can get visually dense with many entities, there's no caching for repeated identical questions, and two backend modules (`ingestion`, `google-docs`) don't yet follow the same service/repository separation the rest of the codebase uses.

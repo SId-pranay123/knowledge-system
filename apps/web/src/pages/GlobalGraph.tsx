@@ -219,12 +219,13 @@ export default function GlobalGraph({ onSelect }: { onSelect: (type: string, id:
         {TYPE_ORDER.map((type) => {
           const style = TYPE_STYLE[type];
           return (
-            <label key={type} className="graph-filter-option">
+            <label key={type} className={`graph-filter-option ${visibleTypes[type] ? 'is-selected' : ''}`}>
               <input
                 type="checkbox"
                 checked={visibleTypes[type]}
                 onChange={() => toggleType(type)}
-                style={{ margin: 0, accentColor: style.stroke }}
+                className="graph-filter-checkbox"
+                style={{ accentColor: style.stroke }}
               />
               <span className="graph-filter-swatch" style={{ background: style.fill, border: `1px solid ${style.stroke}` }} />
               <span>{type}</span>
@@ -244,6 +245,15 @@ export default function GlobalGraph({ onSelect }: { onSelect: (type: string, id:
         className="global-graph-svg"
         style={{ cursor: dragRef.current ? 'grabbing' : 'grab' }}
       >
+        <defs>
+          <pattern id="global-graph-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+            <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#eef1f4" strokeWidth="1" />
+          </pattern>
+          <filter id="global-graph-node-shadow" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#1f2937" floodOpacity="0.12" />
+          </filter>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#global-graph-grid)" opacity="0.55" />
         <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
           {visibleEdges.map((e, i) => {
             const a = nodeById.get(e.sourceId);
@@ -251,9 +261,9 @@ export default function GlobalGraph({ onSelect }: { onSelect: (type: string, id:
             if (!a || !b) return null;
             return (
               <g key={`edge-${i}`}>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#cbd0d6" strokeWidth={1} />
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="global-graph-edge" />
                 {showEdgeLabels && (
-                  <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fontSize={8} fill="#9aa1a8" textAnchor="middle">
+                  <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} className="global-graph-edge-label" textAnchor="middle">
                     {e.relationshipType}
                   </text>
                 )}
@@ -268,10 +278,14 @@ export default function GlobalGraph({ onSelect }: { onSelect: (type: string, id:
                 key={n.id}
                 onClick={(event) => handleNodeClick(event, n)}
                 style={{ cursor: 'pointer' }}
+                className="global-graph-node"
               >
-                <circle cx={n.x} cy={n.y} r={22} fill={style.fill} stroke={style.stroke} strokeWidth={1.5} />
+                <circle cx={n.x} cy={n.y} r={22} fill={style.fill} stroke={style.stroke} strokeWidth={1.5} filter="url(#global-graph-node-shadow)" />
                 <title>{n.label}</title>
-                <text x={n.x} y={n.y} fontSize={9} fill={style.text} textAnchor="middle" dominantBaseline="middle">
+                <text x={n.x} y={n.y} className="global-graph-node-label global-graph-node-label-halo" textAnchor="middle" dominantBaseline="middle">
+                  {truncate(n.label)}
+                </text>
+                <text x={n.x} y={n.y} className="global-graph-node-label" fill={style.text} textAnchor="middle" dominantBaseline="middle">
                   {truncate(n.label)}
                 </text>
               </g>

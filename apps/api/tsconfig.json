@@ -3,14 +3,12 @@
     "module": "commonjs",
     "declaration": true,
     "target": "ES2021",
-    "rootDir": "./src",
     "outDir": "./dist",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "strict": true,
     "skipLibCheck": true,
-    "esModuleInterop": true
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "test"]
+    "esModuleInterop": true,
+    "isolatedModules": true
+  }
 }

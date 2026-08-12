@@ -4,6 +4,8 @@ A connected knowledge management system for a small consulting team. Built with 
 
 See `DESIGN.md` for the full architecture writeup, trade-offs, and reasoning behind every major decision. This README is about getting the system running and understanding what each part does.
 
+Commands below are shown for both **npm** and **yarn** — use whichever you have installed, don't mix them within the same setup.
+
 ## What this system does
 
 - Stores people, projects, clients, documents, decisions, and topics as a connected graph, not isolated records
@@ -24,11 +26,12 @@ See `DESIGN.md` for the full architecture writeup, trade-offs, and reasoning beh
 | Auth | JWT (NestJS + Passport) |
 | Real integration | Notion API |
 
-**Why Node/NestJS instead of Python** (the more common choice for AI/LLM-heavy backends): this is primarily a backend engineering exercise — CRUD, a graph data model, an ingestion pipeline, a REST API — with LLM calls as one component within it, not a data-science or ML-training workload where Python's ecosystem (numpy, pandas, PyTorch) would be a clear advantage. Every LLM interaction here is a REST call to Gemini via LangChain's JS SDK, which has equivalent capabilities to its Python counterpart for this use case (structured output, embeddings, chat). NestJS's module system also maps cleanly onto this domain — each entity type and each pipeline stage (ingestion, resolution, query) becomes its own module with clear boundaries, which reads well in a codebase review.
+**Why Node/NestJS instead of Python** (the more common choice for AI/LLM-heavy backends): this is primarily a backend engineering exercise — CRUD, a graph data model, an ingestion pipeline, a REST API — with LLM calls as one component within it, not a data-science or ML-training workload where Python's ecosystem would be a clear advantage. Every LLM interaction here is a REST call to Gemini via LangChain's JS SDK, which has equivalent capabilities to its Python counterpart for this use case. NestJS's module system also maps cleanly onto this domain — each entity type and each pipeline stage (ingestion, resolution, query) becomes its own module with clear boundaries.
 
 ## Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 18+
+- npm or yarn
 - Docker (for Postgres)
 - A Gemini API key — get one free at [aistudio.google.com](https://aistudio.google.com/apikey)
 
@@ -36,9 +39,13 @@ See `DESIGN.md` for the full architecture writeup, trade-offs, and reasoning beh
 
 ### 1. Clone and install
 ```bash
+# npm
 npm install
+
+# yarn
+yarn install
 ```
-This installs both `apps/api` and `apps/web` via npm workspaces.
+This installs both `apps/api` and `apps/web` via workspaces.
 
 ### 2. Environment variables
 
@@ -52,41 +59,59 @@ AUTH_USERNAME=admin
 AUTH_PASSWORD=change_me
 PORT=3000
 
-# Optional — only needed if you want to test the Notion integration (see below)
+# Optional — only needed to test the Notion integration (see below)
 NOTION_API_KEY=
 
-# Optional — only relevant if you have the Google service account key set up (see DESIGN.md §9 for why this isn't the primary integration)
+# Optional — only relevant if using the Google service account key setup
+# (see DESIGN.md §9 for why this isn't the primary integration)
 GOOGLE_SERVICE_ACCOUNT_KEY_PATH=
 ```
 
 ### 3. Start Postgres
 ```bash
+# npm
 npm run db:up
+
+# yarn
+yarn db:up
 ```
-This runs a `pgvector/pgvector:pg16` Docker image with the `vector` extension pre-installed.
+Runs a `pgvector/pgvector:pg16` Docker image with the `vector` extension pre-installed.
 
 ### 4. Run migrations
 ```bash
+# npm
 npm run db:migrate -w apps/api
+
+# yarn
+yarn workspace api run prisma:migrate
 ```
 Creates all tables: `people`, `clients`, `projects`, `documents`, `chunks`, `decisions`, `topics`, `relationships`, `conversations`, `messages`.
 
 ### 5. Seed the database
 ```bash
+# npm
 npm run prisma:seed -w apps/api
+
+# yarn
+yarn workspace api run prisma:seed
 ```
 This does two things:
 - Inserts the structured sample data (`people.json`, `clients.json`, `projects.json`, `decisions.json`, `topics.json`) directly, including their explicit relationships (who worked on what, who made which decision)
 - Runs the unstructured sample documents (markdown files, Slack export) through the real LLM extraction pipeline — this is where relationships that only exist in prose get discovered (e.g. one project's lessons influencing another)
 
-**This step calls the Gemini API repeatedly** (once per document for extraction, once per chunk for embeddings). On the free tier this can hit daily rate limits — if a run stops partway with a 429 error, it's safe to just re-run `npm run prisma:seed -w apps/api` again later; already-ingested documents are skipped automatically (delta detection via content hash), so it picks up where it left off.
+**This step calls the Gemini API repeatedly** (once per document for extraction, once per chunk for embeddings). On the free tier this can hit daily rate limits — if a run stops partway with a 429 error, it's safe to just re-run the same command later; already-ingested documents are skipped automatically (delta detection via content hash), so it picks up where it left off.
 
 **Sample data location**: the seed script expects a `sample-data/` folder at the repo root, containing the structured JSON files, a `documents/` subfolder of markdown files, and a `slack-exports/` subfolder. Set `SAMPLE_DATA_DIR` in `.env` if it's located elsewhere.
 
 ### 6. Start the API and frontend
 ```bash
-npm run dev:api   # in one terminal
-npm run dev:web   # in another
+# npm — in two separate terminals
+npm run dev:api
+npm run dev:web
+
+# yarn — in two separate terminals
+yarn dev:api
+yarn dev:web
 ```
 API runs on `http://localhost:3000`, frontend on whatever port Vite assigns (shown in terminal, typically `http://localhost:5173`).
 
@@ -130,23 +155,32 @@ curl -X POST http://localhost:3000/api/ingest/document \
 **Ingestion pipeline** (`apps/api/src/ingestion/`): the core "turn a document into graph data" logic.
 - `ingestion.service.ts` — orchestrates the full flow: hash → delta-check → extract → resolve → persist relationships → chunk → embed
 - `extraction.service.ts` — calls Gemini to pull structured entities/relationships out of raw text, grounded against already-known entity names to reduce duplicate/renamed entities
-- `resolution.service.ts` — decides whether a mentioned entity is one that already exists (via six layered matching strategies: exact match, alias match, substring, acronym, token-overlap, embedding similarity) or genuinely new
+- `resolution.service.ts` — decides whether a mentioned entity is one that already exists (via six layered matching strategies: exact match, alias match, substring, acronym, token-overlap, embedding similarity) or genuinely new — shared by both ingestion and query answering
 - `chunking.service.ts` — splits document text into overlapping pieces for embedding/vector search, separate from the whole-document extraction step above
 
 **Query pipeline** (`apps/api/src/query/`): the "answer a question" logic.
 - `query-analyzer.service.ts` — figures out which entities a question is actually about
 - `query.service.ts` — resolves those entities (using the *same* matching logic as ingestion), traverses the graph 1–2 hops from each, searches document chunks by embedding similarity, and asks Gemini to synthesize an answer from both
 
-**The graph itself**: one table, `relationships`, with `(sourceType, sourceId) --relationshipType--> (targetType, targetId)` rows. Every entity type (person, project, client, decision, topic) can be a source or target of any relationship — this is what lets the system represent arbitrary connections (a person worked on a project, a project has a decision, a decision was influenced by another project) without a rigid predefined schema.
+**The graph itself**: one table, `relationships`, with `(sourceType, sourceId) --relationshipType--> (targetType, targetId)` rows. Every entity type (person, project, client, decision, topic) can be a source or target of any relationship — this is what lets the system represent arbitrary connections without a rigid predefined schema.
 
 **Chat history** (`apps/api/src/conversations/`): each question/answer pair is persisted with the resolved entities/relationships/sources from that specific run. Revisiting a past conversation is a plain database read — no LLM calls are re-run.
 
 ## Running tests
+
 ```bash
+# npm
 npm test -w apps/api
+npm run test:integration -w apps/api
+
+# yarn
+yarn workspace api test
+yarn workspace api test:integration
 ```
-Unit tests cover `RelationshipsService` (edge dedup, multi-hop traversal) and `ResolutionService` (each matching layer). An integration test (`apps/api/test/query-flow.integration.spec.ts`) ingests real sample documents and verifies the query pipeline surfaces a genuine cross-project relationship — this needs a running Postgres instance to execute.
+
+- `test` — fast unit tests (`RelationshipsService`, `ResolutionService`), fully mocked, no external dependencies, no live database or API key needed.
+- `test:integration` — exercises the real ingestion/query pipeline against a real Postgres database. Does **not** make real Gemini API calls: `ExtractionService`, `EmbeddingsService`, and `QueryAnalyzerService` are mocked with fixed, deterministic responses, so the test is fast, free, and not subject to rate limits — while still verifying that extraction output correctly becomes graph edges and that traversal finds them. Requires `yarn db:up`/`npm run db:up` first (a running Postgres instance), but no API key.
 
 ## Known limitations
 
-See `DESIGN.md` §7 for the full list. The short version: the global graph view can get visually dense with many entities (a type-filter is planned but not yet built), there's no caching for repeated identical questions, and two backend modules (`ingestion`, `google-docs`) don't yet follow the same service/repository separation the rest of the codebase uses.
+See `DESIGN.md` §7 for the full list. The short version: the global graph view can get visually dense with many entities, there's no caching for repeated identical questions, and two backend modules (`ingestion`, `google-docs`) don't yet follow the same service/repository separation the rest of the codebase uses.

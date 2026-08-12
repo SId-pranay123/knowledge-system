@@ -69,50 +69,51 @@ export default function AskAI() {
   }
 
   return (
-    <div style={{ display: 'flex', maxWidth: 1000, margin: '40px auto', gap: 24, fontFamily: 'sans-serif' }}>
-      <aside style={{ width: 220, flexShrink: 0 }}>
-        <button className="primary-button" onClick={startNewChat} style={{ width: '100%', marginBottom: 16 }}>
+    <div className="ask-layout">
+      <aside className="chat-sidebar">
+        <button className="primary-button new-chat-button" onClick={startNewChat}>
           + New chat
         </button>
-        <ul style={{ listStyle: 'none', padding: 0 }}>
+        <ul className="chat-list">
           {conversations.map((c) => (
             <li
               key={c.id}
               onClick={() => setActiveId(c.id)}
-              style={{
-                padding: '8px 10px',
-                borderRadius: 6,
-                cursor: 'pointer',
-                background: c.id === activeId ? '#eef' : 'transparent',
-                fontSize: 14,
-                marginBottom: 4,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
+              className={`chat-list-item ${c.id === activeId ? 'active' : ''}`}
               title={c.title}
             >
               {c.title}
             </li>
           ))}
-          {conversations.length === 0 && <li style={{ color: '#999', fontSize: 13 }}>No chats yet.</li>}
+          {conversations.length === 0 && (
+            <li className="empty-state">
+              <span className="empty-state-icon">·</span>
+              <span>No chats yet.</span>
+            </li>
+          )}
         </ul>
       </aside>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <h1>Ask the knowledge base</h1>
+      <div className="ask-main">
+        <div className="page-header">
+          <h1>Ask the knowledge base</h1>
+          <p className="page-copy">Ask questions against the graph and source documents, then revisit past answers from the sidebar.</p>
+        </div>
 
-        <div style={{ marginBottom: 20 }}>
+        <div className="message-list">
           {messages.map((m) => (
-            <div key={m.id} style={{ marginBottom: 24 }}>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>{m.question}</div>
+            <div key={m.id} className="message-card">
+              <div className="message-question">{m.question}</div>
               <div className="answer-content">
                 <ReactMarkdown>{m.answer}</ReactMarkdown>
               </div>
             </div>
           ))}
           {!activeId && messages.length === 0 && (
-            <p style={{ color: '#999' }}>Start a new chat or select one from the sidebar.</p>
+            <div className="empty-state list-card">
+              <span className="empty-state-icon">·</span>
+              <span>Start a new chat or select one from the sidebar.</span>
+            </div>
           )}
         </div>
 
@@ -120,35 +121,19 @@ export default function AskAI() {
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="What did we learn from FinEdge that is useful for Lexora?"
-          style={{ width: '100%', height: 80 }}
+          className="input-field ask-textarea"
         />
-        <button className="primary-button" onClick={ask} disabled={asking} style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {asking && (
-            <span
-              style={{
-                width: 14,
-                height: 14,
-                border: '2px solid rgba(255,255,255,0.4)',
-                borderTopColor: '#fff',
-                borderRadius: '50%',
-                display: 'inline-block',
-                animation: 'spin 0.7s linear infinite',
-              }}
-            />
-          )}
-          {asking ? 'Thinking...' : 'Ask'}
-        </button>
+        <div className="ask-submit-row">
+          <button className="primary-button" onClick={ask} disabled={asking}>
+            {asking && <span className="spinner" />}
+            {asking ? 'Thinking...' : 'Ask'}
+          </button>
+        </div>
         {asking && (
-          <div style={{ marginTop: 16, color: '#999', fontSize: 14 }}>
+          <div className="thinking-note">
             Analyzing your question, traversing the graph, and searching documents...
           </div>
         )}
-        <style>{`
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
       </div>
     </div>
   );

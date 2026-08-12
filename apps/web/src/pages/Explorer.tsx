@@ -34,18 +34,17 @@ export default function Explorer({ onSelect }: { onSelect: (type: EntityType, id
   const filtered = rows.filter((r) => getLabel(activeTab, r)?.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <h1>Knowledge Explorer</h1>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+    <div className="page">
+      <div className="page-header">
+        <h1>Knowledge Explorer</h1>
+        <p className="page-copy">Browse entities by type and open any record to inspect its context and relationships.</p>
+      </div>
+      <div className="tabs">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
             className={activeTab === t.key ? 'primary-button' : 'secondary-button'}
-            style={{
-              padding: '8px 14px',
-              borderRadius: 8,
-            }}
           >
             {t.label}
           </button>
@@ -55,28 +54,29 @@ export default function Explorer({ onSelect }: { onSelect: (type: EntityType, id
         placeholder={`Search ${activeTab}...`}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        style={{ width: '100%', padding: 8, marginBottom: 16 }}
+        className="input-field"
       />
       {loading ? (
-        <div>Loading...</div>
+        <div className="loading-state">Loading...</div>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
+        <ul className="list-card section">
           {filtered.map((row) => (
             <li
               key={row.id}
               onClick={() => onSelect(activeTab, row.id)}
-              style={{
-                padding: 12,
-                borderBottom: '1px solid #eee',
-                cursor: 'pointer',
-              }}
+              className="list-row"
             >
-              <strong>{getLabel(activeTab, row)}</strong>
-              {row.role && <span style={{ color: '#666' }}> — {row.role}</span>}
-              {row.status && <span style={{ color: '#666' }}> — {row.status}</span>}
+              <strong className="list-row-title">{getLabel(activeTab, row)}</strong>
+              {row.role && <span className="muted-text"> — {row.role}</span>}
+              {row.status && <span className="muted-text"> — {row.status}</span>}
             </li>
           ))}
-          {filtered.length === 0 && <li style={{ color: '#999', padding: 12 }}>No results.</li>}
+          {filtered.length === 0 && (
+            <li className="empty-state">
+              <span className="empty-state-icon">·</span>
+              <span>No results.</span>
+            </li>
+          )}
         </ul>
       )}
     </div>

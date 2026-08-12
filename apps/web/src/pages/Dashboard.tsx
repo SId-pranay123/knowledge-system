@@ -40,7 +40,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: string) =
   }, []);
 
   if (error) return <div className="error">Failed to load dashboard: {error}</div>;
-  if (!counts) return <div>Loading...</div>;
+  if (!counts) return <div className="loading-state">Loading...</div>;
 
   const cards: { label: string; value: number; page: string }[] = [
     { label: 'People', value: counts.people, page: 'people' },
@@ -52,27 +52,24 @@ export default function Dashboard({ onNavigate }: { onNavigate: (page: string) =
   ];
 
   return (
-    <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <h1>Knowledge Base</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 24 }}>
+    <div className="page">
+      <div className="page-header">
+        <h1>Knowledge Base</h1>
+        <p className="page-copy">A connected view of people, projects, clients, decisions, topics, and source documents.</p>
+      </div>
+      <div className="dashboard-grid">
         {cards.map((c) => (
           <div
             key={c.label}
             onClick={() => onNavigate(c.page)}
-            style={{
-              border: '1px solid #ccc',
-              borderRadius: 8,
-              padding: 16,
-              cursor: 'pointer',
-              textAlign: 'center',
-            }}
+            className="stat-card"
           >
-            <div style={{ fontSize: 28, fontWeight: 700 }}>{c.value}</div>
-            <div style={{ color: '#666' }}>{c.label}</div>
+            <div className="stat-value">{c.value}</div>
+            <div className="stat-label">{c.label}</div>
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 32 }}>
+      <div className="actions-row">
         <button className="primary-button" onClick={() => onNavigate('ask')}>
           Ask a question →
         </button>

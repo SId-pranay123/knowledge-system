@@ -70,7 +70,7 @@ export default function GraphView({
       .finally(() => setLoading(false));
   }, [entityType, entityId]);
 
-  if (loading) return <div style={{ padding: 40 }}>Loading graph...</div>;
+  if (loading) return <div className="loading-state">Loading graph...</div>;
 
   const width = 700;
   const height = 500;
@@ -89,10 +89,17 @@ export default function GraphView({
   const truncate = (s: string, max = 9) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
 
   return (
-    <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <h2>Connections: {centerLabel}</h2>
-      {nodes.length === 0 && <p style={{ color: '#999' }}>No connections to show.</p>}
-      <svg width={width} height={height} style={{ border: '1px solid #eee', borderRadius: 8 }}>
+    <div className="page">
+      <div className="page-header">
+        <h1>Connections: {centerLabel}</h1>
+      </div>
+      {nodes.length === 0 && (
+        <div className="empty-state list-card">
+          <span className="empty-state-icon">·</span>
+          <span>No connections to show.</span>
+        </div>
+      )}
+      <svg width={width} height={height} className="graph-svg">
         {positioned.map((n) => (
           <g key={`edge-${n.id}`}>
             <line x1={cx} y1={cy} x2={n.x} y2={n.y} stroke="#ccc" strokeWidth={1} />

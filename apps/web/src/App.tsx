@@ -90,13 +90,13 @@ export default function App() {
         >
           Ask AI
         </a>
-        <div style={{ marginLeft: 'auto' }}>
+        <div className="nav-spacer">
           {loggedIn ? (
-            <span style={{ color: '#0a0', fontWeight: 600 }}>Logged in</span>
+            <span className="login-status">Logged in</span>
           ) : (
-            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input placeholder="user" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} style={{ width: 80 }} />
-              <input placeholder="pass" type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} style={{ width: 80 }} />
+            <span className="login-controls">
+              <input className="input-field login-input" placeholder="user" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} />
+              <input className="input-field login-input" placeholder="pass" type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} />
               <button className="primary-button" onClick={login}>Login</button>
             </span>
           )}
@@ -115,7 +115,7 @@ export default function App() {
             onSelect={nav.toDetail}
             onBack={nav.toExplorer}
           />
-          <div style={{ textAlign: 'center', marginTop: -16, marginBottom: 40 }}>
+          <div className="actions-row">
             <button className="primary-button" onClick={() => nav.toGraph(route.entityType, route.entityId)}>
               View connections graph →
             </button>
@@ -125,7 +125,7 @@ export default function App() {
 
       {route.page === 'graph' && (
         <>
-          <div style={{ maxWidth: 800, margin: '16px auto 0', textAlign: 'right' }}>
+          <div className="top-action-row">
             <button className="ghost-button" onClick={() => nav.toDetail(route.entityType, route.entityId)}>
               ← Back to details
             </button>

@@ -85,18 +85,20 @@ export default function EntityDetail({
       .finally(() => setLoading(false));
   }, [entityType, entityId]);
 
-  if (loading) return <div style={{ padding: 40 }}>Loading...</div>;
-  if (!entity) return <div style={{ padding: 40 }}>Not found.</div>;
+  if (loading) return <div className="loading-state">Loading...</div>;
+  if (!entity) return <div className="empty-state"><span className="empty-state-icon">·</span><span>Not found.</span></div>;
 
   const label = entity.title ?? entity.name;
 
   return (
-    <div style={{ maxWidth: 800, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <button onClick={onBack} style={{ marginBottom: 16 }}>← Back</button>
-      <h1>{label}</h1>
-      {entity.description && <p style={{ color: '#444' }}>{entity.description}</p>}
+    <div className="page">
+      <div className="page-header">
+        <button className="ghost-button" onClick={onBack}>← Back</button>
+        <h1>{label}</h1>
+      </div>
+      {entity.description && <p className="detail-copy">{entity.description}</p>}
       {entity.reasoning && (
-        <p style={{ color: '#444' }}>
+        <p className="detail-copy">
           <strong>Reasoning:</strong> {entity.reasoning}
         </p>
       )}
@@ -104,30 +106,39 @@ export default function EntityDetail({
       {entity.role && <p><strong>Role:</strong> {entity.role}</p>}
       {entity.email && <p><strong>Email:</strong> {entity.email}</p>}
 
-      <h2 style={{ marginTop: 32 }}>Connections</h2>
-      {relationships.length === 0 && <p style={{ color: '#999' }}>No connections yet.</p>}
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {relationships.map((r) => {
-          const isSource = r.sourceId === entityId;
-          const otherType = isSource ? r.targetType : r.sourceType;
-          const otherId = isSource ? r.targetId : r.sourceId;
-          const arrow = isSource ? '→' : '←';
-          const label = otherLabels[`${otherType}:${otherId}`] ?? otherId;
-          return (
-            <li
-              key={r.id}
-              onClick={() => onSelect(SINGULAR_TO_PLURAL[otherType] ?? `${otherType}s`, otherId)}
-              style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}
-            >
-              <span style={{ color: '#888' }}>{r.relationshipType}</span> {arrow}{' '}
-              <strong>{label}</strong> <span style={{ color: '#aaa' }}>({otherType})</span>
-              {r.metadata?.context && (
-                <div style={{ fontSize: 13, color: '#999', marginTop: 2 }}>{r.metadata.context}</div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="section">
+        <h2>Connections</h2>
+      </div>
+      {relationships.length === 0 && (
+        <div className="empty-state list-card">
+          <span className="empty-state-icon">·</span>
+          <span>No connections yet.</span>
+        </div>
+      )}
+      {relationships.length > 0 && (
+        <ul className="list-card">
+          {relationships.map((r) => {
+            const isSource = r.sourceId === entityId;
+            const otherType = isSource ? r.targetType : r.sourceType;
+            const otherId = isSource ? r.targetId : r.sourceId;
+            const arrow = isSource ? '→' : '←';
+            const label = otherLabels[`${otherType}:${otherId}`] ?? otherId;
+            return (
+              <li
+                key={r.id}
+                onClick={() => onSelect(SINGULAR_TO_PLURAL[otherType] ?? `${otherType}s`, otherId)}
+                className="list-row"
+              >
+                <span className="muted-text">{r.relationshipType}</span> {arrow}{' '}
+                <strong>{label}</strong> <span className="soft-text">({otherType})</span>
+                {r.metadata?.context && (
+                  <div className="relationship-meta">{r.metadata.context}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

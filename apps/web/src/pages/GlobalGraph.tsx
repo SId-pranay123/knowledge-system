@@ -1,15 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { MouseEvent, WheelEvent } from 'react';
 import { api } from '../api/client';
 
 // Explicit maps — see GraphView.tsx/EntityDetail.tsx for why naive
 // pluralization (type + 's', .replace(/s$/,'')) is wrong for "person"/"people".
-const ENDPOINT_FOR: Record<string, string> = {
-  people: '/people',
-  clients: '/clients',
-  projects: '/projects',
-  decisions: '/decisions',
-  topics: '/topics',
-};
 const SINGULAR_TO_PLURAL: Record<string, string> = {
   person: 'people',
   client: 'clients',
@@ -27,6 +21,14 @@ const TYPE_STYLE: Record<string, { fill: string; stroke: string; text: string }>
   client: { fill: '#D9A66C', stroke: '#B37F42', text: '#2b1c0a' },
   decision: { fill: '#A88FC9', stroke: '#7C5FA0', text: '#1f1329' },
   topic: { fill: '#A9A9A2', stroke: '#7E7E76', text: '#1c1c1a' },
+};
+const TYPE_ORDER = ['person', 'project', 'client', 'decision', 'topic'];
+const DEFAULT_VISIBLE_TYPES: Record<string, boolean> = {
+  person: true,
+  project: true,
+  client: true,
+  decision: true,
+  topic: false,
 };
 
 interface Node {
@@ -48,9 +50,13 @@ export default function GlobalGraph({ onSelect }: { onSelect: (type: string, id:
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [visibleTypes, setVisibleTypes] = useState(DEFAULT_VISIBLE_TYPES);
+  const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
+  const dragRef = useRef<{ x: number; y: number; viewX: number; viewY: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
 
-  const width = 900;
-  const height = 640;
+  const width = 1100;
+  const height = 750;
 
   useEffect(() => {
     setLoading(true);
@@ -88,7 +94,7 @@ export default function GlobalGraph({ onSelect }: { onSelect: (type: string, id:
       // Plain physics, no library — sufficient at tens of nodes.
       const simNodes = [...rawNodes];
       const nodeById = new Map(simNodes.map((n) => [n.id, n]));
-      const REPULSION = 2200;
+      const REPULSION = 4600;
       const ATTRACTION = 0.02;
       const CENTER_PULL = 0.01;
       const DAMPING = 0.85;
@@ -135,59 +141,143 @@ export default function GlobalGraph({ onSelect }: { onSelect: (type: string, id:
     }).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ padding: 40 }}>Loading full graph...</div>;
-
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  const showEdgeLabels = edges.length <= 30;
+  const visibleNodes = useMemo(() => nodes.filter((n) => visibleTypes[n.type]), [nodes, visibleTypes]);
+  const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
+  const visibleEdges = useMemo(
+    () => edges.filter((e) => visibleNodeIds.has(e.sourceId) && visibleNodeIds.has(e.targetId)),
+    [edges, visibleNodeIds],
+  );
+  const nodeById = useMemo(() => new Map(visibleNodes.map((n) => [n.id, n])), [visibleNodes]);
+  const showEdgeLabels = visibleEdges.length <= 30;
   const truncate = (s: string, max = 10) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
 
-  return (
-    <div style={{ maxWidth: 1000, margin: '40px auto', fontFamily: 'sans-serif' }}>
-      <h1>Full knowledge graph</h1>
-      <p style={{ color: '#666' }}>All entities and relationships shown together. Click a node to view its details.</p>
+  if (loading) return <div className="loading-state">Loading full graph...</div>;
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 13 }}>
-        {Object.entries(TYPE_STYLE).map(([type, style]) => (
-          <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 12, height: 12, borderRadius: 6, background: style.fill, border: `1px solid ${style.stroke}`, display: 'inline-block' }} />
-            <span style={{ color: '#555', textTransform: 'capitalize' }}>{type}</span>
-          </div>
-        ))}
+  const toggleType = (type: string) => {
+    setVisibleTypes((current) => ({ ...current, [type]: !current[type] }));
+  };
+
+  const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    const zoomFactor = event.deltaY < 0 ? 1.12 : 0.88;
+
+    setView((current) => {
+      const nextScale = Math.min(3, Math.max(0.35, current.scale * zoomFactor));
+      const graphX = (pointerX - current.x) / current.scale;
+      const graphY = (pointerY - current.y) / current.scale;
+
+      return {
+        scale: nextScale,
+        x: pointerX - graphX * nextScale,
+        y: pointerY - graphY * nextScale,
+      };
+    });
+  };
+
+  const handleMouseDown = (event: MouseEvent<SVGSVGElement>) => {
+    dragRef.current = { x: event.clientX, y: event.clientY, viewX: view.x, viewY: view.y, moved: false };
+  };
+
+  const handleMouseMove = (event: MouseEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    setView((current) => ({ ...current, x: drag.viewX + dx, y: drag.viewY + dy }));
+  };
+
+  const stopDragging = () => {
+    const moved = Boolean(dragRef.current?.moved);
+    suppressClickRef.current = moved;
+    dragRef.current = null;
+    if (moved) window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  };
+
+  const handleNodeClick = (event: MouseEvent<SVGGElement>, node: Node) => {
+    if (suppressClickRef.current) {
+      event.preventDefault();
+      suppressClickRef.current = false;
+      return;
+    }
+    onSelect(SINGULAR_TO_PLURAL[node.type] ?? `${node.type}s`, node.id);
+  };
+
+  return (
+    <div className="page page-wide">
+      <div className="page-header">
+        <h1>Full knowledge graph</h1>
+        <p className="page-copy">All entities and relationships shown together. Click a node to view its details.</p>
       </div>
 
-      <svg width={width} height={height} style={{ border: '1px solid #eee', borderRadius: 8, background: '#fafafa' }}>
-        {edges.map((e, i) => {
-          const a = nodeById.get(e.sourceId);
-          const b = nodeById.get(e.targetId);
-          if (!a || !b) return null;
+      <div className="graph-filter-bar">
+        {TYPE_ORDER.map((type) => {
+          const style = TYPE_STYLE[type];
           return (
-            <g key={`edge-${i}`}>
-              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#cbd0d6" strokeWidth={1} />
-              {showEdgeLabels && (
-                <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fontSize={8} fill="#9aa1a8" textAnchor="middle">
-                  {e.relationshipType}
-                </text>
-              )}
-            </g>
+            <label key={type} className="graph-filter-option">
+              <input
+                type="checkbox"
+                checked={visibleTypes[type]}
+                onChange={() => toggleType(type)}
+                style={{ margin: 0, accentColor: style.stroke }}
+              />
+              <span className="graph-filter-swatch" style={{ background: style.fill, border: `1px solid ${style.stroke}` }} />
+              <span>{type}</span>
+            </label>
           );
         })}
+      </div>
 
-        {nodes.map((n) => {
-          const style = TYPE_STYLE[n.type] ?? TYPE_STYLE.topic;
-          return (
-            <g
-              key={n.id}
-              onClick={() => onSelect(SINGULAR_TO_PLURAL[n.type] ?? `${n.type}s`, n.id)}
-              style={{ cursor: 'pointer' }}
-            >
-              <circle cx={n.x} cy={n.y} r={22} fill={style.fill} stroke={style.stroke} strokeWidth={1.5} />
-              <title>{n.label}</title>
-              <text x={n.x} y={n.y} fontSize={9} fill={style.text} textAnchor="middle" dominantBaseline="middle">
-                {truncate(n.label)}
-              </text>
-            </g>
-          );
-        })}
+      <svg
+        width={width}
+        height={height}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={stopDragging}
+        onMouseLeave={stopDragging}
+        className="global-graph-svg"
+        style={{ cursor: dragRef.current ? 'grabbing' : 'grab' }}
+      >
+        <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+          {visibleEdges.map((e, i) => {
+            const a = nodeById.get(e.sourceId);
+            const b = nodeById.get(e.targetId);
+            if (!a || !b) return null;
+            return (
+              <g key={`edge-${i}`}>
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#cbd0d6" strokeWidth={1} />
+                {showEdgeLabels && (
+                  <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fontSize={8} fill="#9aa1a8" textAnchor="middle">
+                    {e.relationshipType}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+
+          {visibleNodes.map((n) => {
+            const style = TYPE_STYLE[n.type] ?? TYPE_STYLE.topic;
+            return (
+              <g
+                key={n.id}
+                onClick={(event) => handleNodeClick(event, n)}
+                style={{ cursor: 'pointer' }}
+              >
+                <circle cx={n.x} cy={n.y} r={22} fill={style.fill} stroke={style.stroke} strokeWidth={1.5} />
+                <title>{n.label}</title>
+                <text x={n.x} y={n.y} fontSize={9} fill={style.text} textAnchor="middle" dominantBaseline="middle">
+                  {truncate(n.label)}
+                </text>
+              </g>
+            );
+          })}
+        </g>
       </svg>
     </div>
   );
